@@ -9,6 +9,7 @@ import (
 	"time"
 )
 
+// TODO: This is mostly a copy of TestKindIntegration_NodeFetchWithInjectedCA, but using Python requests instead of curl. We should probably refactor to share more code between these tests, and add more client languages as well.
 func TestKindIntegration_PythonRequestsWithInjectedCA(t *testing.T) {
 	if getenvOr("CAINJEKT_TLS_E2E", "0") != "1" {
 		t.Skip("set CAINJEKT_TLS_E2E=1 to run TLS trust E2E test")
