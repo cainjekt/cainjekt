@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	hookapi "github.com/tsuzu/cainjekt/internal/engine/api"
+	"github.com/tsuzu/cainjekt/internal/util/containerfs"
 )
 
 func TestDetectApplicableWhenNodeExists(t *testing.T) {
@@ -89,7 +90,7 @@ func TestApplyWrapperNoopWithoutIndividualCAPath(t *testing.T) {
 func writeNodeBinary(t *testing.T, rootfs, containerPath string) {
 	t.Helper()
 
-	hostPath := pathInRootfs(rootfs, containerPath)
+	hostPath := containerfs.PathInRootfs(rootfs, containerPath)
 	if err := os.MkdirAll(filepath.Dir(hostPath), 0o755); err != nil {
 		t.Fatalf("MkdirAll(%q): %v", filepath.Dir(hostPath), err)
 	}
