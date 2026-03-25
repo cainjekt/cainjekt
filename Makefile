@@ -54,3 +54,7 @@ e2e-test: prepare-test-cluster
 .PHONY: test-all
 test-all: prepare-test-cluster
 	GOCACHE=/tmp/go-build-cache CAINJEKT_TLS_INTEGRATION=1 CAINJEKT_E2E=1 go test -tags=integration -count=1 -v ./integration
+
+.PHONY: vhs
+vhs:
+	VHS_NO_SANDBOX=1 vhs -o demo.mp4 demo.tape

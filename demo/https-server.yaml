@@ -1,0 +1,61 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: https-server
+  labels:
+    app: https-server
+spec:
+  restartPolicy: Never
+  containers:
+  - name: server
+    image: python:3.12-alpine
+    imagePullPolicy: IfNotPresent
+    command:
+    - python
+    - -u
+    - -c
+    - |
+      import http.server
+      import ssl
+
+      class Handler(http.server.BaseHTTPRequestHandler):
+          def do_GET(self):
+              if self.path == "/healthz":
+                  self.send_response(200)
+                  self.end_headers()
+                  self.wfile.write(b"OK!\nYou can trust certificates signed by the private CA!\n")
+              else:
+                  self.send_response(404)
+                  self.end_headers()
+
+          def log_message(self, *args):
+              pass
+
+      server = http.server.ThreadingHTTPServer(("0.0.0.0", 8443), Handler)
+      context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+      context.load_cert_chain("/certs/tls.crt", "/certs/tls.key")
+      server.socket = context.wrap_socket(server.socket, server_side=True)
+      server.serve_forever()
+    ports:
+    - containerPort: 8443
+    volumeMounts:
+    - name: tls
+      mountPath: /certs
+      readOnly: true
+  volumes:
+  - name: tls
+    secret:
+      secretName: https-server-tls
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: https-server
+spec:
+  selector:
+    app: https-server
+  ports:
+  - name: https
+    protocol: TCP
+    port: 8443
+    targetPort: 8443

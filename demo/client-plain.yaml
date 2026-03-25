@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: curl-plain
+spec:
+  containers:
+  - name: curl
+    image: ghcr.io/tsuzu/debian-curl
+    command:
+    - sh
+    - -lc
+    - |
+      curl --no-progress-meter https://https-server:8443/healthz || true
+      sleep 3600
