@@ -141,6 +141,7 @@ The DaemonSet supports the following environment variables:
 - `CAINJEKT_CA_FILE`: Path to the CA bundle file (default: `/etc/cainjekt/ca-bundle.pem`)
 - `CAINJEKT_DYNAMIC_CA_ROOT`: Root directory for per-container CA staging (default: `/run/cainjekt/containers`)
 - `CAINJEKT_FAIL_POLICY`: Failure policy, either `fail-open` or `fail-closed` (default: `fail-open`)
+- `CAINJEKT_INJECTION_POLICY`: Pod injection policy, either `opt-in` or `opt-out` (default: `opt-in`)
 
 ### Pod Annotations
 
@@ -150,6 +151,14 @@ To enable CA injection for a specific pod, add the following annotation:
 metadata:
   annotations:
     cainjekt.io/enabled: "true"
+```
+
+If you set `CAINJEKT_INJECTION_POLICY=opt-out` on the DaemonSet, CA injection becomes the default for pods on that node. In that mode, you can disable injection for an individual pod with:
+
+```yaml
+metadata:
+  annotations:
+    cainjekt.io/enabled: "false"
 ```
 
 ### Processor Selection

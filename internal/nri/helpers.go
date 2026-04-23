@@ -14,11 +14,40 @@ func newPlugin(log *slog.Logger) *Plugin {
 	if log == nil {
 		log = slog.New(slog.NewTextHandler(io.Discard, nil))
 	}
-	return &Plugin{log: log}
+	return &Plugin{
+		log:             log,
+		injectionPolicy: injectionPolicyFromEnv(),
+	}
 }
 
-func shouldInject(pod *api.PodSandbox) bool {
-	return strings.EqualFold(pod.GetAnnotations()[config.AnnoEnabled], "true")
+func shouldInject(pod *api.PodSandbox, policy string) bool {
+	if annotations := pod.GetAnnotations(); annotations != nil {
+		if raw, ok := annotations[config.AnnoEnabled]; ok {
+			switch strings.ToLower(strings.TrimSpace(raw)) {
+			case "true":
+				return true
+			case "false":
+				return false
+			default:
+				return false
+			}
+		}
+	}
+
+	return normalizeInjectionPolicy(policy) == config.InjectionPolicyOptOut
+}
+
+func injectionPolicyFromEnv() string {
+	return normalizeInjectionPolicy(getenvOr(config.EnvInjectionPolicy, config.DefaultInjectionPolicy))
+}
+
+func normalizeInjectionPolicy(policy string) string {
+	switch strings.ToLower(strings.TrimSpace(policy)) {
+	case config.InjectionPolicyOptOut:
+		return config.InjectionPolicyOptOut
+	default:
+		return config.DefaultInjectionPolicy
+	}
 }
 
 func hasEnv(env []string, key string) bool {

@@ -13,8 +13,9 @@ import (
 )
 
 type Plugin struct {
-	stub stub.Stub
-	log  *slog.Logger
+	stub            stub.Stub
+	log             *slog.Logger
+	injectionPolicy string
 }
 
 func Run(log *slog.Logger, args []string) error {
@@ -63,7 +64,7 @@ func (p *Plugin) PostCreateContainer(_ context.Context, pod *api.PodSandbox, ctr
 func (p *Plugin) CreateContainer(_ context.Context, pod *api.PodSandbox, ctr *api.Container) (*api.ContainerAdjustment, []*api.ContainerUpdate, error) {
 	p.log.Info("create container", "namespace", pod.GetNamespace(), "pod", pod.GetName(), "container", ctr.GetName())
 
-	if !shouldInject(pod) {
+	if !shouldInject(pod, p.injectionPolicy) {
 		return nil, nil, nil
 	}
 
@@ -115,7 +116,7 @@ func (p *Plugin) CreateContainer(_ context.Context, pod *api.PodSandbox, ctr *ap
 
 func (p *Plugin) RemoveContainer(_ context.Context, pod *api.PodSandbox, ctr *api.Container) error {
 	p.log.Info("removed container", "namespace", pod.GetNamespace(), "pod", pod.GetName(), "container", ctr.GetName())
-	if !shouldInject(pod) {
+	if !shouldInject(pod, p.injectionPolicy) {
 		return nil
 	}
 	if err := cleanupDynamicCAFile(dynamicCARoot(), ctr); err != nil {
