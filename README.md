@@ -31,7 +31,7 @@ See [deploy/kubernetes/README.md](deploy/kubernetes/README.md) for detailed depl
 
 ### Enable CA injection for a pod
 
-Add the annotation to your pod:
+By default, cainjekt uses opt-in injection. Add the annotation to your pod:
 
 ```yaml
 apiVersion: v1
@@ -45,6 +45,19 @@ spec:
   - name: app
     image: my-app:latest
 ```
+
+To switch the DaemonSet to opt-out injection, set `CAINJEKT_INJECTION_POLICY=opt-out`.
+In opt-out mode, pods are injected by default and you can disable injection per pod with:
+
+```yaml
+metadata:
+  annotations:
+    cainjekt.io/enabled: "false"
+```
+
+If you want namespace-level defaults that differ from the global policy, set
+`CAINJEKT_NAMESPACE_POLICIES`, for example `kube-system=opt-in,tenant-a=opt-out`.
+Pod annotations still take precedence over the namespace policy.
 
 ## Container Images
 
