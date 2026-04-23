@@ -142,6 +142,7 @@ The DaemonSet supports the following environment variables:
 - `CAINJEKT_DYNAMIC_CA_ROOT`: Root directory for per-container CA staging (default: `/run/cainjekt/containers`)
 - `CAINJEKT_FAIL_POLICY`: Failure policy, either `fail-open` or `fail-closed` (default: `fail-open`)
 - `CAINJEKT_INJECTION_POLICY`: Pod injection policy, either `opt-in` or `opt-out` (default: `opt-in`)
+- `CAINJEKT_NAMESPACE_POLICIES`: Comma-separated `namespace=policy` entries such as `kube-system=opt-in,tenant-a=opt-out` (default: empty)
 
 ### Pod Annotations
 
@@ -159,6 +160,16 @@ If you set `CAINJEKT_INJECTION_POLICY=opt-out` on the DaemonSet, CA injection be
 metadata:
   annotations:
     cainjekt.io/enabled: "false"
+```
+
+If you want namespace-level defaults that differ from the global default, set `CAINJEKT_NAMESPACE_POLICIES`. Pod annotations still take precedence over the namespace policy. This is especially useful when the global policy is `opt-out`. For example:
+
+```yaml
+env:
+- name: CAINJEKT_INJECTION_POLICY
+  value: opt-out
+- name: CAINJEKT_NAMESPACE_POLICIES
+  value: kube-system=opt-in,tenant-a=opt-out
 ```
 
 ### Processor Selection

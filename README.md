@@ -55,6 +55,10 @@ metadata:
     cainjekt.io/enabled: "false"
 ```
 
+If you want namespace-level defaults that differ from the global policy, set
+`CAINJEKT_NAMESPACE_POLICIES`, for example `kube-system=opt-in,tenant-a=opt-out`.
+Pod annotations still take precedence over the namespace policy.
+
 ## Container Images
 
 Pre-built images are available on GitHub Container Registry:

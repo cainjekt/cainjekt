@@ -58,6 +58,8 @@ spec:
           value: /opt/cainjekt/bin/cainjekt
         - name: CAINJEKT_INJECTION_POLICY
           value: opt-in
+        - name: CAINJEKT_NAMESPACE_POLICIES
+          value: ""
         - name: NODE_NAME
           valueFrom:
             fieldRef:
