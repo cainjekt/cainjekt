@@ -4,7 +4,7 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/tsuzu/cainjekt/internal/app"
+	"github.com/cainjekt/cainjekt/internal/app"
 )
 
 func main() {

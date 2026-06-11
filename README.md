@@ -17,7 +17,7 @@ CA certificate injection tool for Kubernetes using NRI (Node Resource Interface)
 
 ```bash
 # Pull pre-built image from GitHub Container Registry
-docker pull ghcr.io/tsuzu/cainjekt:latest
+docker pull ghcr.io/cainjekt/cainjekt:latest
 
 # Deploy using kustomize
 kubectl apply -k deploy/kubernetes/
@@ -50,9 +50,9 @@ spec:
 
 Pre-built images are available on GitHub Container Registry:
 
-- `ghcr.io/tsuzu/cainjekt:latest` - Latest main branch
-- `ghcr.io/tsuzu/cainjekt:v1.0.0` - Specific version
-- `ghcr.io/tsuzu/cainjekt:main-<sha>` - Specific commit
+- `ghcr.io/cainjekt/cainjekt:latest` - Latest main branch
+- `ghcr.io/cainjekt/cainjekt:v1.0.0` - Specific version
+- `ghcr.io/cainjekt/cainjekt:main-<sha>` - Specific commit
 
 Both `linux/amd64` and `linux/arm64` platforms are supported.
 

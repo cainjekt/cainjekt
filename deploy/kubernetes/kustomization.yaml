@@ -9,5 +9,5 @@ resources:
 
 images:
 - name: cainjekt
-  newName: ghcr.io/tsuzu/cainjekt
+  newName: ghcr.io/cainjekt/cainjekt
   newTag: latest

@@ -3,9 +3,9 @@ package python
 import (
 	"strings"
 
-	hookapi "github.com/tsuzu/cainjekt/internal/engine/api"
-	"github.com/tsuzu/cainjekt/internal/util/containerfs"
-	"github.com/tsuzu/cainjekt/internal/util/envutil"
+	hookapi "github.com/cainjekt/cainjekt/internal/engine/api"
+	"github.com/cainjekt/cainjekt/internal/util/containerfs"
+	"github.com/cainjekt/cainjekt/internal/util/envutil"
 )
 
 const (

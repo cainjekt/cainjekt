@@ -7,9 +7,9 @@ import (
 	"strings"
 	"syscall"
 
-	hookapi "github.com/tsuzu/cainjekt/internal/engine/api"
-	"github.com/tsuzu/cainjekt/internal/engine/processors"
-	"github.com/tsuzu/cainjekt/internal/runtime/hookctx"
+	hookapi "github.com/cainjekt/cainjekt/internal/engine/api"
+	"github.com/cainjekt/cainjekt/internal/engine/processors"
+	"github.com/cainjekt/cainjekt/internal/runtime/hookctx"
 )
 
 func Run() error {
