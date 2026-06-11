@@ -39,7 +39,7 @@ kind: Pod
 metadata:
   name: my-app
   annotations:
-    cainjekt.io/enabled: "true"
+    cainjekt.tsuzu.dev/enabled: "true"
 spec:
   containers:
   - name: app

@@ -120,7 +120,7 @@ metadata:
   name: %s
   namespace: %s
   annotations:
-    cainjekt.io/enabled: "true"
+    cainjekt.tsuzu.dev/enabled: "true"
 spec:
   restartPolicy: Never
   containers:
@@ -144,7 +144,7 @@ metadata:
   name: %s
   namespace: %s
   annotations:
-    cainjekt.io/enabled: "false"
+    cainjekt.tsuzu.dev/enabled: "false"
 spec:
   restartPolicy: Never
   containers:

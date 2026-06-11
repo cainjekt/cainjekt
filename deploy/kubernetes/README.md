@@ -117,7 +117,7 @@ kind: Pod
 metadata:
   name: test-ca-injection
   annotations:
-    cainjekt.io/enabled: "true"
+    cainjekt.tsuzu.dev/enabled: "true"
 spec:
   containers:
   - name: test
@@ -149,7 +149,7 @@ To enable CA injection for a specific pod, add the following annotation:
 ```yaml
 metadata:
   annotations:
-    cainjekt.io/enabled: "true"
+    cainjekt.tsuzu.dev/enabled: "true"
 ```
 
 ### Processor Selection
@@ -159,9 +159,9 @@ You can include or exclude specific processors using annotations:
 ```yaml
 metadata:
   annotations:
-    cainjekt.io/enabled: "true"
-    cainjekt.io/processors.include: "osstore,lang-nodejs,lang-python"
-    cainjekt.io/processors.exclude: "java"
+    cainjekt.tsuzu.dev/enabled: "true"
+    cainjekt.tsuzu.dev/processors.include: "osstore,lang-nodejs,lang-python"
+    cainjekt.tsuzu.dev/processors.exclude: "java"
 ```
 
 Language-specific processors currently include:
