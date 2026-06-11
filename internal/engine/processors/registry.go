@@ -5,10 +5,10 @@ import (
 	"strings"
 	"sync"
 
-	hookapi "github.com/tsuzu/cainjekt/internal/engine/api"
-	"github.com/tsuzu/cainjekt/internal/engine/processors/nodejs"
-	"github.com/tsuzu/cainjekt/internal/engine/processors/osstore"
-	"github.com/tsuzu/cainjekt/internal/engine/processors/python"
+	hookapi "github.com/cainjekt/cainjekt/internal/engine/api"
+	"github.com/cainjekt/cainjekt/internal/engine/processors/nodejs"
+	"github.com/cainjekt/cainjekt/internal/engine/processors/osstore"
+	"github.com/cainjekt/cainjekt/internal/engine/processors/python"
 )
 
 var (

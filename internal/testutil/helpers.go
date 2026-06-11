@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/tsuzu/cainjekt/internal/util/containerfs"
+	"github.com/cainjekt/cainjekt/internal/util/containerfs"
 )
 
 func WriteExecutableInRootfs(t testing.TB, rootfs, containerPath string) {

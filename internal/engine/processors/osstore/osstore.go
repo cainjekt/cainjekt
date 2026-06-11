@@ -10,9 +10,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	hookapi "github.com/tsuzu/cainjekt/internal/engine/api"
-	"github.com/tsuzu/cainjekt/pkg/certs"
-	"github.com/tsuzu/cainjekt/pkg/fsx"
+	hookapi "github.com/cainjekt/cainjekt/internal/engine/api"
+	"github.com/cainjekt/cainjekt/pkg/certs"
+	"github.com/cainjekt/cainjekt/pkg/fsx"
 )
 
 const individualCAFileName = "cainjekt.crt"

@@ -41,12 +41,12 @@ The project provides pre-built container images on GitHub Container Registry:
 
 ```bash
 # Images are available at:
-# ghcr.io/tsuzu/cainjekt:latest (latest main branch)
-# ghcr.io/tsuzu/cainjekt:v1.0.0 (specific version)
-# ghcr.io/tsuzu/cainjekt:main-<sha> (specific commit)
+# ghcr.io/cainjekt/cainjekt:latest (latest main branch)
+# ghcr.io/cainjekt/cainjekt:v1.0.0 (specific version)
+# ghcr.io/cainjekt/cainjekt:main-<sha> (specific commit)
 
 # Supports both amd64 and arm64 architectures
-docker pull ghcr.io/tsuzu/cainjekt:latest
+docker pull ghcr.io/cainjekt/cainjekt:latest
 ```
 
 The kustomization.yaml already points to the GHCR image. If you want to use a different image, update the `newName` in `kustomization.yaml`.

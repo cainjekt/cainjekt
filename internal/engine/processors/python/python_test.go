@@ -3,8 +3,8 @@ package python
 import (
 	"testing"
 
-	hookapi "github.com/tsuzu/cainjekt/internal/engine/api"
-	"github.com/tsuzu/cainjekt/internal/testutil"
+	hookapi "github.com/cainjekt/cainjekt/internal/engine/api"
+	"github.com/cainjekt/cainjekt/internal/testutil"
 )
 
 func TestDetectApplicableWhenPythonExists(t *testing.T) {

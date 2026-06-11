@@ -1,4 +1,4 @@
-module github.com/tsuzu/cainjekt
+module github.com/cainjekt/cainjekt
 
 go 1.25
 

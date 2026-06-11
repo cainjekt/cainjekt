@@ -6,10 +6,10 @@ import (
 	"os"
 	"strings"
 
-	"github.com/tsuzu/cainjekt/internal/config"
-	"github.com/tsuzu/cainjekt/internal/nri"
-	"github.com/tsuzu/cainjekt/internal/runtime/hook"
-	"github.com/tsuzu/cainjekt/internal/runtime/wrapper"
+	"github.com/cainjekt/cainjekt/internal/config"
+	"github.com/cainjekt/cainjekt/internal/nri"
+	"github.com/cainjekt/cainjekt/internal/runtime/hook"
+	"github.com/cainjekt/cainjekt/internal/runtime/wrapper"
 )
 
 func Run(log *slog.Logger, args []string) error {

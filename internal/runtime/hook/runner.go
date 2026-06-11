@@ -6,11 +6,11 @@ import (
 	"os"
 	"strings"
 
-	"github.com/tsuzu/cainjekt/internal/config"
-	hookapi "github.com/tsuzu/cainjekt/internal/engine/api"
-	"github.com/tsuzu/cainjekt/internal/engine/processors"
-	"github.com/tsuzu/cainjekt/internal/runtime/hookctx"
-	"github.com/tsuzu/cainjekt/internal/util/oci"
+	"github.com/cainjekt/cainjekt/internal/config"
+	hookapi "github.com/cainjekt/cainjekt/internal/engine/api"
+	"github.com/cainjekt/cainjekt/internal/engine/processors"
+	"github.com/cainjekt/cainjekt/internal/runtime/hookctx"
+	"github.com/cainjekt/cainjekt/internal/util/oci"
 )
 
 func Run(log *slog.Logger) error {

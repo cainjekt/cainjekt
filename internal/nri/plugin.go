@@ -9,7 +9,7 @@ import (
 
 	"github.com/containerd/nri/pkg/api"
 	"github.com/containerd/nri/pkg/stub"
-	"github.com/tsuzu/cainjekt/internal/config"
+	"github.com/cainjekt/cainjekt/internal/config"
 )
 
 type Plugin struct {
