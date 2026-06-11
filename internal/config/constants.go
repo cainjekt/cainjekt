@@ -12,10 +12,10 @@ const (
 	EnvHookContextFile = "CAINJEKT_HOOK_CONTEXT_FILE"
 	EnvPluginBinaryPath = "CAINJEKT_PLUGIN_BINARY_PATH"
 
-	AnnoEnabled = "cainjekt.io/enabled"
+	AnnoEnabled = "cainjekt.tsuzu.dev/enabled"
 
-	AnnoProcessorsInclude = "cainjekt.io/processors.include"
-	AnnoProcessorsExclude = "cainjekt.io/processors.exclude"
+	AnnoProcessorsInclude = "cainjekt.tsuzu.dev/processors.include"
+	AnnoProcessorsExclude = "cainjekt.tsuzu.dev/processors.exclude"
 
 	FailPolicyOpen         = "fail-open"
 	DefaultCAFile          = "/etc/cainjekt/ca-bundle.pem"
