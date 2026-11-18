@@ -16,8 +16,9 @@ import (
 )
 
 type Plugin struct {
-	stub stub.Stub
-	log  *slog.Logger
+	stub    stub.Stub
+	log     *slog.Logger
+	tracked *tracker
 }
 
 // NRI reconnect backoff. A containerd restart drops the connection;
@@ -75,6 +76,7 @@ func Run(log *slog.Logger, args []string) error {
 		<-ctx.Done()
 		st.Stop()
 	}()
+	go p.runOrphanCleaner(ctx)
 	if err := p.runNRI(ctx); err != nil {
 		return fmt.Errorf("plugin exited: %w", err)
 	}
@@ -109,6 +111,21 @@ func (p *Plugin) runNRI(ctx context.Context) error {
 	}
 }
 
+// Synchronize is called on every (re)connect with all existing containers. It
+// rebuilds the tracked set and sweeps directories of containers that are gone.
+func (p *Plugin) Synchronize(_ context.Context, pods []*api.PodSandbox, ctrs []*api.Container) ([]*api.ContainerUpdate, error) {
+	keys := make([]string, 0, len(ctrs))
+	for _, ctr := range ctrs {
+		if key, err := containerCAKey(ctr); err == nil {
+			keys = append(keys, key)
+		}
+	}
+	p.tracked.reset(keys)
+	p.log.Info("synchronized with runtime", "pods", len(pods), "containers", len(ctrs))
+	p.sweepOrphans(time.Now())
+	return nil, nil
+}
+
 func (p *Plugin) PostCreateContainer(_ context.Context, pod *api.PodSandbox, ctr *api.Container) error {
 	p.log.Info("post create container", "namespace", pod.GetNamespace(), "pod", pod.GetName(), "container", ctr.GetName())
 	return nil
@@ -136,6 +153,9 @@ func (p *Plugin) CreateContainer(_ context.Context, pod *api.PodSandbox, ctr *ap
 	if err != nil {
 		_ = cleanupDynamicCAFile(dynamicCARoot(), ctr)
 		return nil, nil, err
+	}
+	if key, err := containerCAKey(ctr); err == nil {
+		p.tracked.add(key)
 	}
 
 	hook := &api.Hook{
@@ -169,6 +189,9 @@ func (p *Plugin) CreateContainer(_ context.Context, pod *api.PodSandbox, ctr *ap
 
 func (p *Plugin) RemoveContainer(_ context.Context, pod *api.PodSandbox, ctr *api.Container) error {
 	p.log.Info("removed container", "namespace", pod.GetNamespace(), "pod", pod.GetName(), "container", ctr.GetName())
+	if key, err := containerCAKey(ctr); err == nil {
+		p.tracked.remove(key)
+	}
 	if !shouldInject(pod) {
 		return nil
 	}

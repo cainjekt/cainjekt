@@ -14,7 +14,7 @@ func newPlugin(log *slog.Logger) *Plugin {
 	if log == nil {
 		log = slog.New(slog.NewTextHandler(io.Discard, nil))
 	}
-	return &Plugin{log: log}
+	return &Plugin{log: log, tracked: newTracker()}
 }
 
 func shouldInject(pod *api.PodSandbox) bool {
