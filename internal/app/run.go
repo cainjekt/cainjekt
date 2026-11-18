@@ -45,7 +45,8 @@ func runHook(log *slog.Logger) error {
 	budget := config.HookBudget(timeoutSec)
 
 	done := make(chan error, 1)
-	go func() { done <- hookRun(log) }()
+	run := hookRun // read once: an abandoned goroutine must not race on it
+	go func() { done <- run(log) }()
 
 	select {
 	case err = <-done:
