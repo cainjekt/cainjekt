@@ -86,23 +86,11 @@ CA bundle source, validated.
 */}}
 {{- define "cainjekt.caSource" -}}
 {{- $src := .Values.caBundle.source -}}
-{{- if not (has $src (list "configMap" "inline" "clusterTrustBundle")) -}}
-{{- fail (printf "caBundle.source must be configMap, inline or clusterTrustBundle (got %q)" $src) -}}
+{{- if not (has $src (list "configMap" "inline")) -}}
+{{- fail (printf "caBundle.source must be configMap or inline (got %q)" $src) -}}
 {{- end -}}
 {{- if and (eq $src "inline") (not .Values.caBundle.inline) -}}
 {{- fail "caBundle.source=inline requires caBundle.inline (PEM), e.g. --set-file caBundle.inline=ca.pem" -}}
-{{- end -}}
-{{- if eq $src "clusterTrustBundle" -}}
-{{- $ctb := .Values.caBundle.clusterTrustBundle -}}
-{{- if and $ctb.name $ctb.signerName -}}
-{{- fail "caBundle.clusterTrustBundle: name and signerName are mutually exclusive" -}}
-{{- end -}}
-{{- if not (or $ctb.name $ctb.signerName) -}}
-{{- fail "caBundle.source=clusterTrustBundle requires caBundle.clusterTrustBundle.name or .signerName" -}}
-{{- end -}}
-{{- if and $ctb.name $ctb.labelSelector -}}
-{{- fail "caBundle.clusterTrustBundle.labelSelector only applies with signerName" -}}
-{{- end -}}
 {{- end -}}
 {{- $src -}}
 {{- end }}

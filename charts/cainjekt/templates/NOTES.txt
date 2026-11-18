@@ -8,10 +8,6 @@ CA bundle source: {{ .Values.caBundle.source }}
     kubectl create configmap {{ .Values.caBundle.configMap.name }} \
       --from-file={{ .Values.caBundle.configMap.key }}=/path/to/ca-bundle.pem \
       -n {{ include "cainjekt.namespace" . }}
-{{- else if eq .Values.caBundle.source "clusterTrustBundle" }}
-  Projected from ClusterTrustBundle {{ with .Values.caBundle.clusterTrustBundle }}{{ if .name }}name={{ .name }}{{ else }}signerName={{ .signerName }}{{ end }}{{ end }}.
-  Requires the ClusterTrustBundle API and the ClusterTrustBundleProjection
-  feature gate (see values.yaml).
 {{- end }}
 
 To inject the CA into a pod, annotate it:

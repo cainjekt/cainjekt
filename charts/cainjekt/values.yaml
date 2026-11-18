@@ -33,7 +33,7 @@ imagePullSecrets: []
 ## /etc/cainjekt/ca-bundle.pem (CAINJEKT_CA_FILE) on every container creation,
 ## so updates to the source propagate without restarting the DaemonSet.
 caBundle:
-  ## @param caBundle.source Where the bundle comes from: configMap | inline | clusterTrustBundle
+  ## @param caBundle.source Where the bundle comes from: configMap | inline
   source: configMap
 
   configMap:
@@ -46,28 +46,6 @@ caBundle:
   ## e.g. --set caBundle.source=inline --set-file caBundle.inline=/path/to/ca-bundle.pem
   inline: ""
 
-  ## Project ClusterTrustBundle objects (source: clusterTrustBundle) instead of a ConfigMap.
-  ## Requirements: the certificates.k8s.io ClusterTrustBundle API and the
-  ## `clusterTrustBundle` projected volume source. They are alpha in Kubernetes
-  ## v1.29-v1.32 and beta (still disabled by default) since v1.33. On those
-  ## versions enable the `ClusterTrustBundle` and `ClusterTrustBundleProjection`
-  ## feature gates (kube-apiserver; ClusterTrustBundleProjection also on the
-  ## kubelet) and the matching API version via --runtime-config
-  ## (certificates.k8s.io/v1beta1/clustertrustbundles=true, or v1alpha1 before
-  ## v1.33). Without them the API server drops or rejects the volume source.
-  ## The kubelet normalizes the PEM: certificates are deduplicated, comments and
-  ## headers stripped, and the order is arbitrary.
-  clusterTrustBundle:
-    ## @param caBundle.clusterTrustBundle.name Select one ClusterTrustBundle by name (exclusive with signerName)
-    name: ""
-    ## @param caBundle.clusterTrustBundle.signerName Select all ClusterTrustBundles of this signer
-    signerName: ""
-    ## @param caBundle.clusterTrustBundle.labelSelector Narrow the signerName selection (unset: all bundles of the signer)
-    labelSelector: {}
-    #  matchLabels:
-    #    example.com/trust: org
-    ## @param caBundle.clusterTrustBundle.optional Start even if no bundle matches (the file is then empty)
-    optional: false
 
 plugin:
   ## @param plugin.name NRI plugin name

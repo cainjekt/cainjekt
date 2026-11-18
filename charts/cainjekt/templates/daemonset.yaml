@@ -154,30 +154,12 @@ spec:
             path: /var/run/nri
             type: DirectoryOrCreate
         - name: ca-bundle
-          {{- if eq $caSource "clusterTrustBundle" }}
-          {{- $ctb := .Values.caBundle.clusterTrustBundle }}
-          projected:
-            sources:
-              - clusterTrustBundle:
-                  {{- if $ctb.name }}
-                  name: {{ $ctb.name | quote }}
-                  {{- else }}
-                  signerName: {{ $ctb.signerName | quote }}
-                  {{- with $ctb.labelSelector }}
-                  labelSelector:
-                    {{- toYaml . | nindent 20 }}
-                  {{- end }}
-                  {{- end }}
-                  optional: {{ $ctb.optional }}
-                  path: ca-bundle.pem
-          {{- else }}
           configMap:
             name: {{ include "cainjekt.caBundleConfigMapName" . }}
             optional: false
             items:
               - key: {{ ternary "ca-bundle.pem" .Values.caBundle.configMap.key (eq $caSource "inline") | quote }}
                 path: ca-bundle.pem
-          {{- end }}
         - name: dynamic-ca-root
           hostPath:
             path: /run/cainjekt

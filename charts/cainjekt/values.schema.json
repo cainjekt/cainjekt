@@ -14,7 +14,7 @@
     "caBundle": {
       "type": "object",
       "properties": {
-        "source": { "enum": ["configMap", "inline", "clusterTrustBundle"] },
+        "source": { "enum": ["configMap", "inline"] },
         "configMap": {
           "type": "object",
           "properties": {
@@ -22,16 +22,7 @@
             "key": { "type": "string", "minLength": 1 }
           }
         },
-        "inline": { "type": "string" },
-        "clusterTrustBundle": {
-          "type": "object",
-          "properties": {
-            "name": { "type": "string" },
-            "signerName": { "type": "string" },
-            "labelSelector": { "type": "object" },
-            "optional": { "type": "boolean" }
-          }
-        }
+        "inline": { "type": "string" }
       }
     },
     "plugin": {

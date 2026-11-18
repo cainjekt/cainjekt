@@ -54,29 +54,6 @@ helm install cainjekt charts/cainjekt -n kube-system --set image.tag=<version> \
 released). The image must include the `cainjekt install` subcommand used by the
 initContainer.
 
-#### CA bundle from ClusterTrustBundles
-
-With `caBundle.source=clusterTrustBundle` the bundle is projected from
-[ClusterTrustBundle](https://kubernetes.io/docs/reference/access-authn-authz/certificate-signing-requests/#cluster-trust-bundles)
-objects instead of a ConfigMap, selected by name or by signer name plus an
-optional label selector. Selected bundles are merged and deduplicated, and updates
-reach new containers without restarting the plugin.
-
-```bash
-helm install cainjekt charts/cainjekt -n kube-system --set image.tag=<version> \
-  --set caBundle.source=clusterTrustBundle \
-  --set caBundle.clusterTrustBundle.signerName=example.com/org \
-  --set caBundle.clusterTrustBundle.labelSelector.matchLabels.trust=org
-# or: --set caBundle.clusterTrustBundle.name=<bundle-name>
-```
-
-Requirements: the ClusterTrustBundle API and the `clusterTrustBundle` projected
-volume source are alpha in Kubernetes v1.29-v1.32 and beta, but disabled by
-default, from v1.33. Enable the `ClusterTrustBundle` and
-`ClusterTrustBundleProjection` feature gates (kube-apiserver and kubelet) and the
-API via `--runtime-config=certificates.k8s.io/v1beta1/clustertrustbundles=true`
-(`v1alpha1` before v1.33). Tested on kind v1.35 with these settings.
-
 #### Other values
 
 | Value | Default | Description |
