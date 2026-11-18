@@ -69,19 +69,12 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Build installer Docker image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          target: installer
-          load: true
-          push: false
-          tags: cainjekt-installer:ci-test
-          cache-from: type=gha
-
-      - name: Test Docker images
+      - name: Test Docker image
         run: |
           docker run --rm cainjekt:ci-test --help || true
           docker inspect cainjekt:ci-test --format='{{.Config.Entrypoint}}'
           docker inspect cainjekt:ci-test --format='Size: {{.Size}} bytes'
-          docker inspect cainjekt-installer:ci-test --format='Size: {{.Size}} bytes'
+          # The initContainer runs `cainjekt install`; smoke-test it with a
+          # read-only root filesystem and no capabilities, as in the DaemonSet.
+          docker run --rm --read-only --cap-drop=ALL --security-opt=no-new-privileges \
+            --tmpfs /host/opt/cainjekt cainjekt:ci-test install --dest /host/opt/cainjekt/bin/cainjekt

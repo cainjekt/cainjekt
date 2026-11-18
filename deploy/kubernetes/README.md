@@ -63,15 +63,12 @@ kubectl create configmap cainjekt-ca-bundle \
 
 **Note**: The ConfigMap is not included in the kustomization by default. You must create it separately with your actual CA bundle.
 
-### 4. Deploy using kubectl
+### 4. Deploy using kustomize
 
-```bash
-# Deploy the manifests
-kubectl apply -f rbac.yaml
-kubectl apply -f daemonset.yaml
-```
-
-### 5. Deploy using kustomize
+`daemonset.yaml` refers to the image by the placeholder name `cainjekt`;
+`kustomization.yaml` maps it to `ghcr.io/cainjekt/cainjekt`, so always apply the
+directory with `-k` rather than the files with `-f`. Release manifests pin the
+release tag; to pin one yourself, set `newTag` (see Customization).
 
 ```bash
 # Create ConfigMap first
@@ -83,14 +80,37 @@ kubectl create configmap cainjekt-ca-bundle \
 kubectl apply -k .
 ```
 
-### 6. Deploy using the deployment script
+### 5. Deploy using the deployment script
 
 The script handles ConfigMap creation automatically:
 
 ```bash
 cd deploy/kubernetes
-./deploy.sh --ca-file /path/to/ca-bundle.pem
+./deploy.sh --ca-file /path/to/ca-bundle.pem --image-tag <tag>
 ```
+
+## Privileges
+
+The DaemonSet runs with the least privilege that works:
+
+- No `hostNetwork`, `hostPID` or host root filesystem mount: the plugin talks
+  to containerd over the NRI unix socket only.
+- No ServiceAccount token and no RBAC: the plugin never calls the Kubernetes API.
+- Both containers run as uid 0 but **not privileged**, with all capabilities
+  dropped, `allowPrivilegeEscalation: false`, a read-only root filesystem and
+  the `RuntimeDefault` seccomp profile. Root is needed only because the NRI
+  socket (`/var/run/nri`) and the hostPath directories it writes
+  (`/run/cainjekt` by the plugin, `/opt/cainjekt` by the initContainer) are
+  root-owned.
+- The pod runs in the SELinux type `spc_t`, because on SELinux-enforcing nodes
+  `container_t` may not connect to the NRI socket or write those host-labelled
+  directories. Nodes without SELinux ignore it.
+
+The part that edits container filesystems (the OCI createRuntime hook) is not
+run in this pod: containerd runs `/opt/cainjekt/bin/cainjekt` on the host, as
+it does all OCI hooks. The initContainer only copies the binary there with
+`cainjekt install --dest /host/opt/cainjekt/bin/cainjekt` (atomic write and
+rename), using the same distroless image as the plugin.
 
 ## Verify Installation
 
@@ -141,6 +161,12 @@ The DaemonSet supports the following environment variables:
 - `CAINJEKT_CA_FILE`: Path to the CA bundle file (default: `/etc/cainjekt/ca-bundle.pem`)
 - `CAINJEKT_DYNAMIC_CA_ROOT`: Root directory for per-container CA staging (default: `/run/cainjekt/containers`)
 - `CAINJEKT_FAIL_POLICY`: Failure policy, either `fail-open` or `fail-closed` (default: `fail-open`)
+- `CAINJEKT_HOOK_TIMEOUT_SEC`: OCI hook timeout in seconds, 2-120 (default: `20`)
+- `CAINJEKT_LOG_LEVEL`: `debug`, `info`, `warn` or `error`
+
+`CAINJEKT_FAIL_POLICY` and `CAINJEKT_HOOK_TIMEOUT_SEC` take effect with
+cainjekt/cainjekt#32 and `CAINJEKT_LOG_LEVEL` with #33; they are listed,
+commented out, in `daemonset.yaml`.
 
 ### Pod Annotations
 

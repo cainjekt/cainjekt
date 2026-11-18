@@ -19,47 +19,90 @@ spec:
         app: cainjekt
     spec:
       serviceAccountName: cainjekt
-      hostPID: true
-      hostNetwork: true
+      # The plugin talks to containerd over the NRI unix socket only; it never
+      # calls the Kubernetes API, so no token is mounted.
+      automountServiceAccountToken: false
       priorityClassName: system-node-critical
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+        # SELinux-enforcing nodes (RHEL, RKE2 with selinux: true, SLE Micro):
+        # the default container_t domain may not connect to the NRI socket or
+        # write /run/cainjekt and /opt/cainjekt, which carry host labels.
+        # spc_t lifts only the SELinux confinement; capabilities stay dropped.
+        # Nodes without SELinux ignore it.
+        seLinuxOptions:
+          type: spc_t
       tolerations:
       - operator: Exists
         effect: NoSchedule
       - operator: Exists
         effect: NoExecute
       initContainers:
+      # Copies the plugin binary to the host (/opt/cainjekt/bin/cainjekt):
+      # containerd executes it there as an OCI createRuntime hook and
+      # bind-mounts it into containers as /cainjekt-entrypoint.
       - name: install-plugin-binary
-        image: cainjekt-installer:latest
+        image: cainjekt
         imagePullPolicy: IfNotPresent
-        command:
-        - /bin/sh
-        - -c
-        - |
-          # Copy plugin binary to host path so OCI hooks can access it
-          mkdir -p /host-bin/bin
-          install -m 0755 /cainjekt /host-bin/bin/cainjekt
-          ls -la /host-bin/bin/cainjekt
-          echo "Plugin binary installed to /opt/cainjekt/bin/cainjekt"
+        args:
+        - install
+        - --dest=/host/opt/cainjekt/bin/cainjekt
+        securityContext:
+          # Root only because the NRI socket and the hostPath directories are
+          # root-owned; no capabilities are needed.
+          runAsUser: 0
+          runAsGroup: 0
+          privileged: false
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop: ["ALL"]
         volumeMounts:
         - name: plugin-install-dir
-          mountPath: /host-bin
+          mountPath: /host/opt/cainjekt
+        resources:
+          requests:
+            cpu: 10m
+            memory: 16Mi
+          limits:
+            cpu: 100m
+            memory: 64Mi
       containers:
       - name: cainjekt
-        image: cainjekt:latest
+        image: cainjekt
         imagePullPolicy: IfNotPresent
         securityContext:
-          privileged: true
+          # Same as the initContainer: root for the root-owned NRI socket and
+          # /run/cainjekt, no capabilities.
+          runAsUser: 0
+          runAsGroup: 0
+          privileged: false
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop: ["ALL"]
         env:
         - name: CAINJEKT_CA_FILE
           value: /etc/cainjekt/ca-bundle.pem
         - name: CAINJEKT_DYNAMIC_CA_ROOT
           value: /run/cainjekt/containers
+        # Host path of the binary installed by the initContainer. containerd
+        # resolves it on the host, so the plugin container does not mount it.
         - name: CAINJEKT_PLUGIN_BINARY_PATH
           value: /opt/cainjekt/bin/cainjekt
         - name: NODE_NAME
           valueFrom:
             fieldRef:
               fieldPath: spec.nodeName
+        # Optional tuning (requires cainjekt with configurable hook policy and
+        # log level, cainjekt/cainjekt#32 and #33):
+        # - name: CAINJEKT_FAIL_POLICY      # fail-open (default) | fail-closed
+        #   value: fail-open
+        # - name: CAINJEKT_HOOK_TIMEOUT_SEC # 2-120, default 20
+        #   value: "20"
+        # - name: CAINJEKT_LOG_LEVEL        # debug | info | warn | error
+        #   value: info
         args:
         - --name=cainjekt
         - --idx=10
@@ -71,13 +114,6 @@ spec:
           readOnly: true
         - name: dynamic-ca-root
           mountPath: /run/cainjekt
-        - name: plugin-install-dir
-          mountPath: /opt/cainjekt
-          readOnly: true
-        - name: host-root
-          mountPath: /host
-          readOnly: true
-          mountPropagation: HostToContainer
         resources:
           requests:
             cpu: 10m
@@ -102,7 +138,3 @@ spec:
         hostPath:
           path: /opt/cainjekt
           type: DirectoryOrCreate
-      - name: host-root
-        hostPath:
-          path: /
-          type: Directory
