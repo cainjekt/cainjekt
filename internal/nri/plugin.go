@@ -138,15 +138,15 @@ func (p *Plugin) Synchronize(_ context.Context, pods []*api.PodSandbox, ctrs []*
 	return nil, nil
 }
 
-func (p *Plugin) PostCreateContainer(_ context.Context, pod *api.PodSandbox, ctr *api.Container) error {
-	p.log.Info("post create container", "namespace", pod.GetNamespace(), "pod", pod.GetName(), "container", ctr.GetName())
-	return nil
-}
-
 func (p *Plugin) CreateContainer(_ context.Context, pod *api.PodSandbox, ctr *api.Container) (*api.ContainerAdjustment, []*api.ContainerUpdate, error) {
-	p.log.Info("create container", "namespace", pod.GetNamespace(), "pod", pod.GetName(), "container", ctr.GetName())
-
+	log := p.log.With("namespace", pod.GetNamespace(), "pod", pod.GetName(), "container", ctr.GetName(), "id", ctr.GetId())
+	if keys := unknownCainjektKeys(pod); len(keys) > 0 {
+		log.Warn("pod has unrecognized cainjekt annotations (typo?)", "keys", keys, "known", []string{
+			config.AnnoEnabled, config.AnnoProcessorsInclude, config.AnnoProcessorsExclude,
+		})
+	}
 	if !shouldInject(pod) {
+		log.Debug("skip: not enabled", "annotation", config.AnnoEnabled)
 		return nil, nil, nil
 	}
 
@@ -169,8 +169,7 @@ func (p *Plugin) CreateContainer(_ context.Context, pod *api.PodSandbox, ctr *ap
 		if config.IsFailClosed(p.failPolicy) {
 			return nil, nil, err
 		}
-		p.log.Error("failed to stage CA bundle, starting container without injection (fail-open)",
-			"namespace", pod.GetNamespace(), "pod", pod.GetName(), "container", ctr.GetName(), "error", err)
+		log.Error("failed to stage CA bundle, starting container without injection (fail-open)", "error", err)
 		return nil, nil, nil
 	}
 	if key, err := containerCAKey(ctr); err == nil {
@@ -206,11 +205,13 @@ func (p *Plugin) CreateContainer(_ context.Context, pod *api.PodSandbox, ctr *ap
 		Options:     []string{"bind", "ro"},
 	})
 	adjustment.AddHooks(&api.Hooks{CreateRuntime: []*api.Hook{hook}})
+	log.Info("inject", "ca_file", caFileForHook,
+		"processors.include", pod.GetAnnotations()[config.AnnoProcessorsInclude],
+		"processors.exclude", pod.GetAnnotations()[config.AnnoProcessorsExclude])
 	return adjustment, nil, nil
 }
 
 func (p *Plugin) RemoveContainer(_ context.Context, pod *api.PodSandbox, ctr *api.Container) error {
-	p.log.Info("removed container", "namespace", pod.GetNamespace(), "pod", pod.GetName(), "container", ctr.GetName())
 	if key, err := containerCAKey(ctr); err == nil {
 		p.tracked.remove(key)
 	}
@@ -218,7 +219,8 @@ func (p *Plugin) RemoveContainer(_ context.Context, pod *api.PodSandbox, ctr *ap
 		return nil
 	}
 	if err := cleanupDynamicCAFile(dynamicCARoot(), ctr); err != nil {
-		p.log.Warn("failed to cleanup dynamic CA bundle", "error", err)
+		p.log.Warn("failed to cleanup dynamic CA bundle", "namespace", pod.GetNamespace(), "pod", pod.GetName(),
+			"container", ctr.GetName(), "error", err)
 	}
 	return nil
 }

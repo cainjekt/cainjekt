@@ -20,10 +20,13 @@ const (
 	EnvPluginBinaryPath = "CAINJEKT_PLUGIN_BINARY_PATH"
 	EnvHookTimeoutSec   = "CAINJEKT_HOOK_TIMEOUT_SEC"
 
-	AnnoEnabled = "cainjekt.tsuzu.dev/enabled"
+	AnnoPrefix  = "cainjekt.tsuzu.dev/"
+	AnnoEnabled = AnnoPrefix + "enabled"
 
-	AnnoProcessorsInclude = "cainjekt.tsuzu.dev/processors.include"
-	AnnoProcessorsExclude = "cainjekt.tsuzu.dev/processors.exclude"
+	AnnoProcessorsInclude = AnnoPrefix + "processors.include"
+	AnnoProcessorsExclude = AnnoPrefix + "processors.exclude"
+
+	EnvLogLevel = "CAINJEKT_LOG_LEVEL"
 
 	FailPolicyOpen          = "fail-open"
 	FailPolicyClosed        = "fail-closed"
