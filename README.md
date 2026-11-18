@@ -46,6 +46,30 @@ spec:
     image: my-app:latest
 ```
 
+## Health and Metrics
+
+The plugin serves HTTP on `--http-addr` (default `:9102`; empty disables it):
+
+- `GET /healthz`: 200 while the process is alive.
+- `GET /readyz`: 200 only while connected to and synchronized with containerd, 503 otherwise.
+- `GET /metrics`: Prometheus metrics (plus Go and process collectors).
+
+| Metric | Type | Description |
+|---|---|---|
+| `cainjekt_containers_injected_total` | counter | Containers set up for CA injection |
+| `cainjekt_containers_skipped_total{reason}` | counter | Containers started without injection (`not_enabled`, `injection_error`) |
+| `cainjekt_injection_errors_total` | counter | CA staging failures, under any fail policy |
+| `cainjekt_orphan_dirs_cleaned_total` | counter | Staged CA directories removed for vanished containers |
+| `cainjekt_nri_connected` | gauge | 1 while connected and synchronized with the runtime |
+| `cainjekt_nri_reconnects_total` | counter | Reconnects after the runtime connection was lost |
+| `cainjekt_ca_bundle_certificates` | gauge | Parseable certificates in the source CA bundle |
+| `cainjekt_ca_bundle_earliest_expiry_timestamp_seconds` | gauge | Earliest NotAfter in the bundle (Unix time) |
+| `cainjekt_ca_bundle_info{sha256}` | gauge | Always 1; label is the bundle's short SHA-256 |
+| `cainjekt_ca_bundle_read_errors_total` | counter | Failed periodic reads of the source CA bundle |
+
+The CA bundle gauges are refreshed every minute and on every injection. Example
+expiry alert: `cainjekt_ca_bundle_earliest_expiry_timestamp_seconds - time() < 14 * 86400`.
+
 ## Container Images
 
 Pre-built images are available on GitHub Container Registry:

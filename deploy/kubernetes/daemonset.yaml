@@ -71,6 +71,25 @@ spec:
         args:
         - --name=cainjekt
         - --idx=10
+        - --http-addr=:9102
+        # hostNetwork: the port is bound on the node.
+        ports:
+        - name: http-metrics
+          containerPort: 9102
+          protocol: TCP
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: http-metrics
+          periodSeconds: 10
+          failureThreshold: 3
+        # Ready only while connected to and synchronized with containerd.
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: http-metrics
+          periodSeconds: 5
+          failureThreshold: 2
         volumeMounts:
         - name: nri-socket
           mountPath: /var/run/nri
