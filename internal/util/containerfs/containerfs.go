@@ -7,10 +7,14 @@
 //   - takes container-absolute paths, never host paths;
 //   - resolves symlinks as the container would see them (absolute targets are
 //     re-anchored to the rootfs, never to the host root);
-//   - performs the actual I/O through an os.Root, so even a path that changes
-//     between resolution and use can never escape the rootfs;
+//   - performs the actual I/O through go-chrootfs, i.e. openat2 with
+//     RESOLVE_IN_ROOT: the kernel resolves every path (including absolute
+//     symlinks and "..") inside the rootfs, so even a path that changes
+//     between resolution and use can never escape it;
 //   - reads only bounded regular files (no FIFOs, devices or huge files);
 //   - never replaces a symlink.
+//
+// It requires Linux 5.6+ (openat2 with RESOLVE_IN_ROOT); see CheckSupport.
 //
 // The forbidigo rule in .golangci.yml rejects direct os/filepath file access
 // in hook-phase packages so new code cannot bypass these rules.
@@ -37,6 +41,20 @@ const MaxReadSize = 16 << 20
 
 const maxSymlinkHops = 40
 
+// rootFS is the subset of go-chrootfs' Chroot used here. The implementation is
+// Linux-only (see containerfs_linux.go); elsewhere openRoot always fails.
+type rootFS interface {
+	Close() error
+	Open(name string) (*os.File, error)
+	OpenFile(name string, flag int, perm os.FileMode) (*os.File, error)
+	MkdirAll(name string, perm os.FileMode) error
+	Remove(name string) error
+	Rename(oldname, newname string) error
+	Lstat(name string) (os.FileInfo, error)
+	Readlink(name string) (string, error)
+	FS() fs.FS
+}
+
 // PathInRootfs joins a container-absolute path onto the host rootfs path
 // WITHOUT resolving symlinks. It must only be used for paths that were already
 // resolved with ResolveSymlinks, or for building test fixtures.
@@ -50,15 +68,15 @@ func PathInRootfs(rootfs, containerPath string) string {
 // The returned path may not exist (dangling links and missing components
 // resolve to their would-be location).
 func ResolveSymlinks(rootfs, containerPath string) (string, error) {
-	root, err := os.OpenRoot(rootfs)
+	root, err := openRoot(rootfs)
 	if err != nil {
-		return "", fmt.Errorf("failed to open rootfs %s: %w", rootfs, err)
+		return "", err
 	}
 	defer func() { _ = root.Close() }()
 	return resolve(root, containerPath)
 }
 
-func resolve(root *os.Root, containerPath string) (string, error) {
+func resolve(root rootFS, containerPath string) (string, error) {
 	remaining := splitContainerPath(containerPath)
 	resolved := make([]string, 0, len(remaining))
 	hops := 0
@@ -103,7 +121,7 @@ func resolve(root *os.Root, containerPath string) (string, error) {
 // RegularFile reports whether containerPath resolves to a regular file in the
 // rootfs, and returns the resolved container path.
 func RegularFile(rootfs, containerPath string) (string, bool) {
-	root, err := os.OpenRoot(rootfs)
+	root, err := openRoot(rootfs)
 	if err != nil {
 		return "", false
 	}
@@ -131,9 +149,9 @@ func HasAnyRegularFile(rootfs string, containerPaths []string) bool {
 // resolved container path. Only regular files up to MaxReadSize are read. A
 // missing file returns an error wrapping os.ErrNotExist.
 func ReadFile(rootfs, containerPath string) ([]byte, string, error) {
-	root, err := os.OpenRoot(rootfs)
+	root, err := openRoot(rootfs)
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to open rootfs %s: %w", rootfs, err)
+		return nil, "", err
 	}
 	defer func() { _ = root.Close() }()
 	resolved, err := resolve(root, containerPath)
@@ -144,7 +162,7 @@ func ReadFile(rootfs, containerPath string) ([]byte, string, error) {
 	return data, resolved, err
 }
 
-func readRegular(root *os.Root, rel string) ([]byte, error) {
+func readRegular(root rootFS, rel string) ([]byte, error) {
 	// Lstat first so a device node is never opened: opening some devices has
 	// side effects of its own.
 	fi, err := root.Lstat(rel)
@@ -182,9 +200,9 @@ func readRegular(root *os.Root, rel string) ([]byte, error) {
 // replace a symlink or a non-regular file and keeps the existing file's mode
 // and owner; new files get fallbackMode.
 func WriteFile(rootfs, containerPath string, data []byte, fallbackMode os.FileMode) (string, error) {
-	root, err := os.OpenRoot(rootfs)
+	root, err := openRoot(rootfs)
 	if err != nil {
-		return "", fmt.Errorf("failed to open rootfs %s: %w", rootfs, err)
+		return "", err
 	}
 	defer func() { _ = root.Close() }()
 	resolved, err := resolve(root, containerPath)
@@ -205,7 +223,7 @@ func WriteFile(rootfs, containerPath string, data []byte, fallbackMode os.FileMo
 	return resolved, nil
 }
 
-func atomicWrite(root *os.Root, rel string, data []byte, fallbackMode os.FileMode) error {
+func atomicWrite(root rootFS, rel string, data []byte, fallbackMode os.FileMode) error {
 	if fallbackMode == 0 {
 		fallbackMode = 0o644
 	}
@@ -280,10 +298,10 @@ func tempName(rel string) (string, error) {
 }
 
 // Glob returns the container paths matching a rootfs-relative pattern (no
-// leading slash). Matching runs on an os.Root, so links pointing out of the
-// rootfs are never followed.
+// leading slash). Matching runs inside the rootfs: absolute links are
+// followed relative to it and nothing can resolve outside of it.
 func Glob(rootfs, pattern string) []string {
-	root, err := os.OpenRoot(rootfs)
+	root, err := openRoot(rootfs)
 	if err != nil {
 		return nil
 	}

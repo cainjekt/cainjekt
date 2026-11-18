@@ -71,6 +71,7 @@ make kind-load
 
 ## Requirements
 
+- Linux kernel 5.6 or later on every node (`openat2` with `RESOLVE_IN_ROOT`, used to confine all access to container filesystems). The plugin refuses to start on older kernels.
 - Kubernetes cluster with containerd runtime
 - containerd v2.0+ (NRI enabled by default) or v1.x with NRI manually enabled
 - CA certificate bundle to inject
