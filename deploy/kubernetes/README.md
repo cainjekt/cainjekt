@@ -161,13 +161,14 @@ metadata:
   annotations:
     cainjekt.tsuzu.dev/enabled: "true"
     cainjekt.tsuzu.dev/processors.include: "osstore,lang-nodejs,lang-python"
-    cainjekt.tsuzu.dev/processors.exclude: "java"
+    cainjekt.tsuzu.dev/processors.exclude: "lang-java"
 ```
 
 Language-specific processors currently include:
 
 - `lang-nodejs`: sets `NODE_EXTRA_CA_CERTS`
 - `lang-python`: sets `SSL_CERT_FILE` and `REQUESTS_CA_BUNDLE`
+- `lang-java`: adds the CA to every JVM `cacerts` keystore (JKS or PKCS#12) in the image, so no JVM flags are needed
 
 ## Customization
 
