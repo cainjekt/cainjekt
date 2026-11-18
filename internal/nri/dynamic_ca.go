@@ -8,9 +8,9 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/containerd/nri/pkg/api"
 	"github.com/cainjekt/cainjekt/internal/config"
 	"github.com/cainjekt/cainjekt/pkg/fsx"
+	"github.com/containerd/nri/pkg/api"
 )
 
 const dynamicCAFileName = "ca-bundle.pem"
