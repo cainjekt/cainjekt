@@ -1,0 +1,22 @@
+cainjekt is deployed as DaemonSet {{ include "cainjekt.fullname" . }} in namespace {{ include "cainjekt.namespace" . }}.
+
+CA bundle source: {{ .Values.caBundle.source }}
+{{- if eq .Values.caBundle.source "configMap" }}
+  The ConfigMap {{ .Values.caBundle.configMap.name }} (key {{ .Values.caBundle.configMap.key }}) must exist in
+  namespace {{ include "cainjekt.namespace" . }}; pods stay in ContainerCreating until it does:
+
+    kubectl create configmap {{ .Values.caBundle.configMap.name }} \
+      --from-file={{ .Values.caBundle.configMap.key }}=/path/to/ca-bundle.pem \
+      -n {{ include "cainjekt.namespace" . }}
+{{- end }}
+
+To inject the CA into a pod, annotate it:
+
+  metadata:
+    annotations:
+      cainjekt.tsuzu.dev/enabled: "true"
+
+Status and logs:
+
+  kubectl -n {{ include "cainjekt.namespace" . }} rollout status daemonset/{{ include "cainjekt.fullname" . }}
+  kubectl -n {{ include "cainjekt.namespace" . }} logs -l app.kubernetes.io/instance={{ .Release.Name }} -f

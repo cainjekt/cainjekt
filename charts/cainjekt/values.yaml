@@ -1,0 +1,180 @@
+# Default values for cainjekt.
+
+## @param nameOverride Partially override resource names
+nameOverride: ""
+## @param fullnameOverride Fully override resource names
+fullnameOverride: ""
+## @param namespaceOverride Deploy into this namespace instead of the release namespace
+namespaceOverride: ""
+## @param commonLabels Labels added to all resources
+commonLabels: {}
+## @param commonAnnotations Annotations added to all resources
+commonAnnotations: {}
+## @param podLabels Extra labels for the DaemonSet pods
+podLabels: {}
+## @param podAnnotations Extra annotations for the DaemonSet pods
+podAnnotations: {}
+
+image:
+  ## @param image.repository Image used by both the plugin and the installer initContainer
+  repository: ghcr.io/cainjekt/cainjekt
+  ## @param image.tag Image tag (defaults to the chart appVersion). Pin a release for production.
+  ## The installer initContainer runs `cainjekt install`, so the image must include that subcommand.
+  tag: ""
+  ## @param image.digest Image digest (sha256:...); takes precedence over the tag
+  digest: ""
+  ## @param image.pullPolicy Image pull policy
+  pullPolicy: IfNotPresent
+
+## @param imagePullSecrets Image pull secrets
+imagePullSecrets: []
+
+## CA bundle injected into containers. The plugin reads it from
+## /etc/cainjekt/ca-bundle.pem (CAINJEKT_CA_FILE) on every container creation,
+## so updates to the source propagate without restarting the DaemonSet.
+caBundle:
+  ## @param caBundle.source Where the bundle comes from: configMap | inline
+  source: configMap
+
+  configMap:
+    ## @param caBundle.configMap.name Existing ConfigMap (in the release namespace) holding the bundle
+    name: cainjekt-ca-bundle
+    ## @param caBundle.configMap.key Key of the PEM bundle within the ConfigMap
+    key: ca-bundle.pem
+
+  ## @param caBundle.inline PEM bundle; the chart creates a ConfigMap from it (source: inline)
+  ## e.g. --set caBundle.source=inline --set-file caBundle.inline=/path/to/ca-bundle.pem
+  inline: ""
+
+
+plugin:
+  ## @param plugin.name NRI plugin name
+  name: cainjekt
+  ## @param plugin.index NRI plugin index (two digits, orders plugins)
+  index: "10"
+
+## The settings below are passed as environment variables. They take effect
+## with cainjekt builds that include cainjekt/cainjekt#32 (fail policy, hook
+## timeout) and #33 (log level); older images ignore them.
+## @param failPolicy CAINJEKT_FAIL_POLICY: fail-open (start the container uninjected on error) or fail-closed
+failPolicy: fail-open
+## @param hookTimeoutSec CAINJEKT_HOOK_TIMEOUT_SEC: OCI hook timeout in seconds (2-120)
+hookTimeoutSec: 20
+## @param logLevel CAINJEKT_LOG_LEVEL: debug, info, warn or error
+logLevel: info
+
+## @param extraEnv Extra environment variables for the plugin container
+extraEnv: []
+
+## Health/metrics HTTP server (plugin flag --http-addr) serving /healthz,
+## /readyz (ready once synchronized with containerd) and /metrics. Off by
+## default: it needs a cainjekt image that has the HTTP server (not on main yet).
+httpServer:
+  ## @param httpServer.enabled Pass --http-addr and expose the container port
+  enabled: false
+  ## @param httpServer.port Listen port
+  port: 9102
+
+probes:
+  liveness:
+    ## @param probes.liveness.enabled GET /healthz liveness probe (requires httpServer.enabled)
+    enabled: false
+    initialDelaySeconds: 5
+    periodSeconds: 30
+    timeoutSeconds: 3
+    failureThreshold: 3
+  readiness:
+    ## @param probes.readiness.enabled GET /readyz readiness probe (requires httpServer.enabled)
+    enabled: false
+    initialDelaySeconds: 2
+    periodSeconds: 10
+    timeoutSeconds: 3
+    failureThreshold: 3
+
+metrics:
+  service:
+    ## @param metrics.service.enabled Headless Service exposing /metrics (requires httpServer.enabled)
+    enabled: false
+    ## @param metrics.service.annotations Service annotations
+    annotations: {}
+  serviceMonitor:
+    ## @param metrics.serviceMonitor.enabled Prometheus Operator ServiceMonitor (requires httpServer.enabled; creates the Service)
+    enabled: false
+    ## @param metrics.serviceMonitor.interval Scrape interval
+    interval: 30s
+    ## @param metrics.serviceMonitor.scrapeTimeout Scrape timeout
+    scrapeTimeout: ""
+    ## @param metrics.serviceMonitor.labels Extra labels (e.g. release: prometheus)
+    labels: {}
+
+## @param updateStrategy DaemonSet update strategy
+updateStrategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxUnavailable: 1
+
+## @param tolerations Tolerations (default: run on every node, including tainted ones)
+tolerations:
+  - operator: Exists
+    effect: NoSchedule
+  - operator: Exists
+    effect: NoExecute
+
+## @param nodeSelector Node selector
+nodeSelector: {}
+## @param affinity Affinity rules
+affinity: {}
+## @param priorityClassName Priority class
+priorityClassName: system-node-critical
+
+## @param podSecurityContext Pod security context
+## spc_t: on SELinux-enforcing nodes (RHEL, RKE2 with selinux: true, SLE Micro)
+## the default container_t domain may not connect to the NRI socket or write
+## /run/cainjekt and /opt/cainjekt, which carry host labels. spc_t lifts only
+## the SELinux confinement; capabilities stay dropped. Nodes without SELinux
+## ignore it.
+podSecurityContext:
+  seccompProfile:
+    type: RuntimeDefault
+  seLinuxOptions:
+    type: spc_t
+
+## @param securityContext Security context of the plugin and installer containers
+## uid 0 is needed only because the NRI socket and the hostPath directories are
+## root-owned. The OCI hook that edits container filesystems is run by
+## containerd on the host, not in this pod, so no capabilities are needed.
+securityContext:
+  runAsUser: 0
+  runAsGroup: 0
+  privileged: false
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+## @param resources Plugin container resources
+resources:
+  requests:
+    cpu: 10m
+    memory: 32Mi
+  limits:
+    cpu: 100m
+    memory: 128Mi
+
+## @param installerResources Installer initContainer resources
+installerResources:
+  requests:
+    cpu: 10m
+    memory: 16Mi
+  limits:
+    cpu: 100m
+    memory: 64Mi
+
+serviceAccount:
+  ## @param serviceAccount.create Create a ServiceAccount (the plugin never calls the Kubernetes API; no RBAC is created)
+  create: true
+  ## @param serviceAccount.name ServiceAccount name (generated if empty)
+  name: ""
+  ## @param serviceAccount.annotations ServiceAccount annotations
+  annotations: {}
