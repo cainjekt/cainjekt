@@ -3,6 +3,7 @@ package hookctx
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/cainjekt/cainjekt/internal/config"
@@ -43,6 +44,18 @@ func TestWriteAndRead(t *testing.T) {
 	}
 	if out.Context.Facts[string(hookapi.FactTrustStorePath)] != "/etc/ssl/certs/ca-certificates.crt" {
 		t.Fatalf("TrustStore mismatch: got=%q", out.Context.Facts[string(hookapi.FactTrustStorePath)])
+	}
+	if out.Context.FailPolicy != "fail-open" {
+		t.Fatalf("FailPolicy mismatch: got=%q", out.Context.FailPolicy)
+	}
+	raw, err := os.ReadFile(hostPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, leaked := range []string{`"a"`, "/bundle", "ca-bundle.pem"} {
+		if strings.Contains(string(raw), leaked) {
+			t.Fatalf("hook context must not persist %s: %s", leaked, raw)
+		}
 	}
 	if len(out.Detected) != 2 {
 		t.Fatalf("Detected count mismatch: %#v", out.Detected)

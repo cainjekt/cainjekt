@@ -19,13 +19,15 @@ type DetectedProcessor struct {
 	Reason     string `json:"reason,omitempty"`
 }
 
+// PersistedContext is the subset of the hook context the wrapper needs.
+//
+// The file lives inside the container rootfs and is readable by the workload,
+// so it must only contain what the wrapper uses: never pod annotations (which
+// can carry kubectl last-applied configs or other sensitive data) nor host
+// paths such as the bundle directory.
 type PersistedContext struct {
-	Mode        string            `json:"mode,omitempty"`
-	Bundle      string            `json:"bundle,omitempty"`
-	Annotations map[string]string `json:"annotations,omitempty"`
-	CAFile      string            `json:"ca_file,omitempty"`
-	FailPolicy  string            `json:"fail_policy,omitempty"`
-	Facts       map[string]string `json:"facts,omitempty"`
+	FailPolicy string            `json:"fail_policy,omitempty"`
+	Facts      map[string]string `json:"facts,omitempty"`
 }
 
 type State struct {
@@ -34,24 +36,25 @@ type State struct {
 }
 
 func NewStateFromContext(ctx *hookapi.Context, detected []DetectedProcessor) State {
-	ann := make(map[string]string, len(ctx.Annotations))
-	for k, v := range ctx.Annotations {
-		ann[k] = v
-	}
 	facts := map[string]string{}
 	for k, v := range ctx.Facts.Snapshot() {
 		facts[string(k)] = v
 	}
+	// The wrapper only acts on applicable processors; reasons may contain
+	// host-side error details.
+	applicable := make([]DetectedProcessor, 0, len(detected))
+	for _, d := range detected {
+		if d.Applicable {
+			d.Reason = ""
+			applicable = append(applicable, d)
+		}
+	}
 	return State{
 		Context: PersistedContext{
-			Mode:        ctx.Mode,
-			Bundle:      ctx.Bundle,
-			Annotations: ann,
-			CAFile:      ctx.CAFile,
-			FailPolicy:  ctx.FailPolicy,
-			Facts:       facts,
+			FailPolicy: ctx.FailPolicy,
+			Facts:      facts,
 		},
-		Detected: detected,
+		Detected: applicable,
 	}
 }
 
@@ -61,10 +64,7 @@ func (s State) ToHookContext() *hookapi.Context {
 		facts[hookapi.FactKey(k)] = v
 	}
 	return &hookapi.Context{
-		Mode:        s.Context.Mode,
-		Bundle:      s.Context.Bundle,
-		Annotations: cloneStringMap(s.Context.Annotations),
-		CAFile:      s.Context.CAFile,
+		Annotations: map[string]string{},
 		FailPolicy:  s.Context.FailPolicy,
 		Facts:       hookapi.NewMapFactStoreFromSnapshot(facts),
 	}
@@ -98,7 +98,6 @@ func Read() (State, error) {
 	if err := json.Unmarshal(b, &out); err != nil {
 		return State{}, fmt.Errorf("failed to parse hook context file %s: %w", p, err)
 	}
-	out.Context.Annotations = cloneStringMap(out.Context.Annotations)
 	out.Context.Facts = cloneStringMap(out.Context.Facts)
 	return out, nil
 }
