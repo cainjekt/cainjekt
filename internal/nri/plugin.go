@@ -7,7 +7,9 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -23,6 +25,7 @@ type Plugin struct {
 
 	failPolicy     string
 	hookTimeoutSec int
+	specTrustEnv   bool
 }
 
 // NRI reconnect backoff. A containerd restart drops the connection;
@@ -62,7 +65,8 @@ func Run(log *slog.Logger, args []string) error {
 	if p.hookTimeoutSec, err = config.ParseHookTimeoutSec(os.Getenv(config.EnvHookTimeoutSec)); err != nil {
 		return err
 	}
-	log.Info("starting", "fail_policy", p.failPolicy, "hook_timeout_sec", p.hookTimeoutSec)
+	p.specTrustEnv = !strings.EqualFold(strings.TrimSpace(os.Getenv(config.EnvSpecTrustEnv)), "false")
+	log.Info("starting", "fail_policy", p.failPolicy, "hook_timeout_sec", p.hookTimeoutSec, "spec_trust_env", p.specTrustEnv)
 	// No WithOnClose: a lost connection makes stub.Run return and runNRI
 	// reconnects.
 	var opts []stub.Option
@@ -205,10 +209,63 @@ func (p *Plugin) CreateContainer(_ context.Context, pod *api.PodSandbox, ctr *ap
 		Options:     []string{"bind", "ro"},
 	})
 	adjustment.AddHooks(&api.Hooks{CreateRuntime: []*api.Hook{hook}})
-	log.Info("inject", "ca_file", caFileForHook,
+	specEnv := p.addSpecTrustEnv(adjustment, ctr, caFileForHook, log)
+	log.Info("inject", "ca_file", caFileForHook, "spec_trust_env", specEnv,
 		"processors.include", pod.GetAnnotations()[config.AnnoProcessorsInclude],
 		"processors.exclude", pod.GetAnnotations()[config.AnnoProcessorsExclude])
 	return adjustment, nil, nil
+}
+
+// Trust env vars put on the container spec. The wrapper only affects the
+// entrypoint process; processes started via exec (kubectl exec, CI runners
+// executing each step as an exec) are seeded from the spec instead.
+var (
+	specMergedEnv = []string{"SSL_CERT_FILE", "REQUESTS_CA_BUNDLE", "CURL_CA_BUNDLE", "GIT_SSL_CAINFO"}
+	specOrgEnv    = []string{"NODE_EXTRA_CA_CERTS"}
+)
+
+// addSpecTrustEnv bind-mounts the staged CA directory read-only at
+// config.ContainerCADir and points trust env vars at it. Variables the
+// container already defines are left alone. It returns the variables set.
+func (p *Plugin) addSpecTrustEnv(adj *api.ContainerAdjustment, ctr *api.Container, stagedCA string, log *slog.Logger) []string {
+	if !p.specTrustEnv {
+		return nil
+	}
+	dir := filepath.Dir(stagedCA)
+	adj.AddMount(&api.Mount{
+		Destination: config.ContainerCADir,
+		Type:        "bind",
+		Source:      dir,
+		Options:     []string{"bind", "ro", "nosuid", "nodev", "noexec"},
+	})
+
+	var set []string
+	add := func(keys []string, value string) {
+		for _, k := range keys {
+			if hasEnv(ctr.GetEnv(), k) {
+				continue
+			}
+			adj.AddEnv(k, value)
+			set = append(set, k)
+		}
+	}
+	add(specOrgEnv, config.ContainerOrgCA)
+
+	orgCA, err := os.ReadFile(stagedCA)
+	if err != nil {
+		log.Warn("cannot seed merged CA bundle; trust-replacing env vars not set", "error", err)
+		return set
+	}
+	ok, err := seedMergedCA(dir, orgCA)
+	switch {
+	case err != nil:
+		log.Warn("cannot seed merged CA bundle; trust-replacing env vars not set", "error", err)
+	case !ok:
+		log.Warn("plugin image has no CA store to seed the merged bundle; trust-replacing env vars not set")
+	default:
+		add(specMergedEnv, config.ContainerMergedCA)
+	}
+	return set
 }
 
 func (p *Plugin) RemoveContainer(_ context.Context, pod *api.PodSandbox, ctr *api.Container) error {
