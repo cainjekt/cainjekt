@@ -1,7 +1,10 @@
+// Package envutil manipulates KEY=VALUE environment lists.
 package envutil
 
 import "strings"
 
+// Upsert sets key to value in env, replacing the first existing entry for key
+// in place or appending a new one, and returns the updated slice.
 func Upsert(env []string, key, value string) []string {
 	prefix := key + "="
 	entry := prefix + value

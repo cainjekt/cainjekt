@@ -1,3 +1,6 @@
+// Package hook implements the OCI hook registered by the NRI plugin. It lets
+// each applicable processor inject the CA into the container rootfs and
+// records the result for the entrypoint wrapper.
 package hook
 
 import (
@@ -13,6 +16,8 @@ import (
 	"github.com/cainjekt/cainjekt/internal/util/oci"
 )
 
+// Run executes the hook for the OCI state read from stdin, as selected by
+// HOOK_MODE.
 func Run(log *slog.Logger) error {
 	mode := strings.ToLower(strings.TrimSpace(os.Getenv(config.EnvHookMode)))
 	if mode != config.ModeCreateRT && mode != config.ModeCreateCtr {
@@ -34,8 +39,8 @@ func Run(log *slog.Logger) error {
 		Bundle:      state.Bundle,
 		Annotations: state.Annotations,
 		Rootfs:      oci.ResolveRootfsPath(state.Bundle, spec),
-		CAFile:      getenvOr(config.EnvCAFile, config.DefaultCAFile),
-		FailPolicy:  getenvOr(config.EnvFailPolicy, config.FailPolicyOpen),
+		CAFile:      config.GetenvOr(config.EnvCAFile, config.DefaultCAFile),
+		FailPolicy:  config.GetenvOr(config.EnvFailPolicy, config.FailPolicyOpen),
 		Facts:       hookapi.NewMapFactStore(),
 	}
 
@@ -87,11 +92,4 @@ func runProcessors(ctx *hookapi.Context, list []hookapi.Processor) []hookctx.Det
 		ctx.AddResult(hookapi.ProcessorResult{Name: d.Processor.Name(), Category: d.Processor.Category(), Applied: err == nil, Err: err})
 	}
 	return persisted
-}
-
-func getenvOr(key, fallback string) string {
-	if v := strings.TrimSpace(os.Getenv(key)); v != "" {
-		return v
-	}
-	return fallback
 }

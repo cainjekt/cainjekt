@@ -7,6 +7,7 @@ import (
 	"io"
 )
 
+// State is the OCI runtime state passed to hooks on stdin.
 type State struct {
 	OCIVersion  string            `json:"ociVersion"`
 	ID          string            `json:"id"`
@@ -16,6 +17,7 @@ type State struct {
 	Annotations map[string]string `json:"annotations"`
 }
 
+// ReadState decodes the OCI runtime state from r.
 func ReadState(r io.Reader) (*State, error) {
 	in, err := io.ReadAll(r)
 	if err != nil {

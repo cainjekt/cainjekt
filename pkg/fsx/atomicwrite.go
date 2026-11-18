@@ -1,3 +1,4 @@
+// Package fsx provides file system helpers for host paths.
 package fsx
 
 import (
@@ -8,12 +9,17 @@ import (
 	"syscall"
 )
 
+// WriteOptions configures AtomicWrite.
 type WriteOptions struct {
 	FallbackMode  os.FileMode
 	RefuseSymlink bool
 	PreserveOwner bool
 }
 
+// AtomicWrite replaces path with data via a temporary file in the same
+// directory and a rename. An existing file's permissions (and, with
+// PreserveOwner, its ownership) are kept; a new file gets FallbackMode
+// (default 0644). With RefuseSymlink, an existing symlink at path is an error.
 func AtomicWrite(path string, data []byte, opt WriteOptions) error {
 	if opt.FallbackMode == 0 {
 		opt.FallbackMode = 0o644
