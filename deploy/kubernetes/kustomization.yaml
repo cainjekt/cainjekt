@@ -7,6 +7,9 @@ resources:
 - rbac.yaml
 - daemonset.yaml
 
+# daemonset.yaml uses the placeholder image name `cainjekt` for both the plugin
+# and the initContainer (`cainjekt install`). `latest` tracks main; release
+# manifests (GitHub releases) pin the release tag. Pin newTag for production.
 images:
 - name: cainjekt
   newName: ghcr.io/cainjekt/cainjekt

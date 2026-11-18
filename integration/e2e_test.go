@@ -146,6 +146,20 @@ ready:
 	logs := runCmd(t, 30*time.Second, "kubectl", "logs", "-n", "kube-system", podName, "--tail=50")
 	t.Logf("Pod logs:\n%s", logs)
 
+	// The initContainer (`cainjekt install`, same image as the plugin) must
+	// have placed an executable binary on the host for containerd's hooks.
+	perm := strings.TrimSpace(runCmd(t, 30*time.Second, "docker", "exec", node, "stat", "-c", "%a", "/opt/cainjekt/bin/cainjekt"))
+	if perm != "755" {
+		t.Fatalf("installed plugin binary mode = %q, want 755", perm)
+	}
+
+	// The plugin must run unprivileged with all capabilities dropped.
+	secCtx := runCmd(t, 30*time.Second, "kubectl", "get", "pod", "-n", "kube-system", podName,
+		"-o", `jsonpath={.spec.containers[?(@.name=="cainjekt")].securityContext}`)
+	if strings.Contains(secCtx, `"privileged":true`) || !strings.Contains(secCtx, `"drop":["ALL"]`) {
+		t.Fatalf("unexpected plugin securityContext: %s", secCtx)
+	}
+
 	// Create test namespace
 	ns := fmt.Sprintf("cainjekt-manifest-test-%d", time.Now().UnixNano())
 	t.Cleanup(func() {

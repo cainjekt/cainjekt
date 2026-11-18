@@ -1,3 +1,6 @@
+# The plugin talks to containerd over the NRI socket only and never calls the
+# Kubernetes API, so the ServiceAccount has no (Cluster)Role bindings and the
+# DaemonSet does not mount its token.
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -5,32 +8,4 @@ metadata:
   namespace: kube-system
   labels:
     app: cainjekt
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  name: cainjekt
-  labels:
-    app: cainjekt
-rules:
-# NRI plugins typically don't need extensive RBAC permissions
-# as they interact with the container runtime via NRI socket
-# Add permissions here if needed for future features
-- apiGroups: [""]
-  resources: ["nodes"]
-  verbs: ["get", "list"]
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: cainjekt
-  labels:
-    app: cainjekt
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: cainjekt
-subjects:
-- kind: ServiceAccount
-  name: cainjekt
-  namespace: kube-system
+automountServiceAccountToken: false

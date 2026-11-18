@@ -33,7 +33,7 @@ while [[ $# -gt 0 ]]; do
       echo ""
       echo "Options:"
       echo "  --ca-file FILE      Path to CA bundle file (required)"
-      echo "  --image-tag TAG     Container image tag (default: latest)"
+      echo "  --image-tag TAG     Container image tag (default: latest; pin a release, e.g. v1.4.0)"
       echo "  --namespace NS      Kubernetes namespace (default: kube-system)"
       echo "  -h, --help          Show this help message"
       exit 0
@@ -69,13 +69,26 @@ kubectl create configmap cainjekt-ca-bundle \
   --namespace="$NAMESPACE" \
   --dry-run=client -o yaml | kubectl apply -f -
 
-# Apply RBAC
-echo -e "${YELLOW}Applying RBAC resources...${NC}"
-kubectl apply -f rbac.yaml
-
-# Apply DaemonSet
-echo -e "${YELLOW}Deploying DaemonSet...${NC}"
-kubectl apply -f daemonset.yaml
+# Apply ServiceAccount and DaemonSet through kustomize, so the image
+# placeholder in daemonset.yaml resolves to ghcr.io/cainjekt/cainjekt:<tag>.
+echo -e "${YELLOW}Deploying ServiceAccount and DaemonSet (image tag: ${IMAGE_TAG})...${NC}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+OVERLAY_DIR="$(mktemp -d)"
+trap 'rm -rf "$OVERLAY_DIR"' EXIT
+cp "$SCRIPT_DIR/rbac.yaml" "$SCRIPT_DIR/daemonset.yaml" "$OVERLAY_DIR/"
+cat > "$OVERLAY_DIR/kustomization.yaml" <<EOF
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: ${NAMESPACE}
+resources:
+- rbac.yaml
+- daemonset.yaml
+images:
+- name: cainjekt
+  newName: ghcr.io/cainjekt/cainjekt
+  newTag: ${IMAGE_TAG}
+EOF
+kubectl apply -k "$OVERLAY_DIR"
 
 # Wait for DaemonSet to be ready
 echo -e "${YELLOW}Waiting for DaemonSet to be ready...${NC}"
