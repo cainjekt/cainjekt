@@ -17,12 +17,17 @@ const dynamicCAFileName = "ca-bundle.pem"
 
 var unsafePathChars = regexp.MustCompile(`[^A-Za-z0-9._-]`)
 
-func stageDynamicCAFile(sourceCAFile, root string, ctr *api.Container) (string, error) {
+func readSourceCAFile(sourceCAFile string) ([]byte, error) {
 	content, err := os.ReadFile(sourceCAFile)
 	if err != nil {
-		return "", fmt.Errorf("failed to read source CA file %s: %w", sourceCAFile, err)
+		return nil, fmt.Errorf("failed to read source CA file %s: %w", sourceCAFile, err)
 	}
+	return content, nil
+}
 
+// stageDynamicCAFile writes the CA bundle content to the container's staging
+// directory under root and returns the staged file's path.
+func stageDynamicCAFile(content []byte, root string, ctr *api.Container) (string, error) {
 	targetDir, err := containerCADir(root, ctr)
 	if err != nil {
 		return "", err

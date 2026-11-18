@@ -30,7 +30,8 @@ func (f *fakeStub) Run(ctx context.Context) error {
 func TestRunNRIReconnectsAfterConnectionLoss(t *testing.T) {
 	t.Parallel()
 	fs := &fakeStub{fails: 3}
-	p := &Plugin{stub: fs, log: slog.New(slog.NewTextHandler(io.Discard, nil))}
+	p := newPlugin(slog.New(slog.NewTextHandler(io.Discard, nil)))
+	p.stub = fs
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)

@@ -5,9 +5,11 @@ import (
 	"flag"
 	"fmt"
 	"log/slog"
+	"net"
 	"os"
 	"os/signal"
 	"strconv"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -20,6 +22,10 @@ type Plugin struct {
 	stub    stub.Stub
 	log     *slog.Logger
 	tracked *tracker
+	metrics *metrics
+	// ready is true while connected to and synchronized with the runtime:
+	// set in Synchronize, cleared when stub.Run returns.
+	ready atomic.Bool
 
 	failPolicy     string
 	hookTimeoutSec int
@@ -44,12 +50,15 @@ func Run(log *slog.Logger, args []string) error {
 		pluginName string
 		pluginIdx  string
 		socketPath string
+		httpAddr   string
 	)
 
 	fs := flag.NewFlagSet("cainjekt", flag.ContinueOnError)
 	fs.StringVar(&pluginName, "name", "", "plugin name to register to NRI")
 	fs.StringVar(&pluginIdx, "idx", "", "plugin index to register to NRI")
 	fs.StringVar(&socketPath, "socket", "", "path to the plugin socket")
+	fs.StringVar(&httpAddr, "http-addr", defaultHTTPAddr,
+		"listen address for /healthz, /readyz and /metrics (empty disables the server)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -88,12 +97,43 @@ func Run(log *slog.Logger, args []string) error {
 		<-ctx.Done()
 		st.Stop()
 	}()
+
+	var httpDone chan struct{}
+	if httpAddr != "" {
+		ln, err := net.Listen("tcp", httpAddr)
+		if err != nil {
+			return fmt.Errorf("failed to listen on --http-addr %s: %w", httpAddr, err)
+		}
+		log.Info("serving health and metrics", "addr", ln.Addr().String())
+		httpDone = make(chan struct{})
+		go func() {
+			defer close(httpDone)
+			serveHTTP(ctx, log, newHTTPServer(p.metrics.registry, p.ready.Load), ln)
+		}()
+	}
+
 	go p.runOrphanCleaner(ctx)
-	if err := p.runNRI(ctx); err != nil {
+	go p.runCAMetricsRefresher(ctx, getenvOr(config.EnvCAFile, config.DefaultCAFile))
+	err = p.runNRI(ctx)
+	// Stop the HTTP server on give-up too, and wait for it to drain.
+	stop()
+	if httpDone != nil {
+		<-httpDone
+	}
+	if err != nil {
 		return fmt.Errorf("plugin exited: %w", err)
 	}
 	p.log.Info("shutting down")
 	return nil
+}
+
+func (p *Plugin) setReady(ready bool) {
+	p.ready.Store(ready)
+	if ready {
+		p.metrics.nriConnected.Set(1)
+	} else {
+		p.metrics.nriConnected.Set(0)
+	}
 }
 
 // runNRI keeps the plugin connected to the runtime until ctx is cancelled.
@@ -103,6 +143,7 @@ func (p *Plugin) runNRI(ctx context.Context) error {
 	for {
 		started := time.Now()
 		err := p.stub.Run(ctx)
+		p.setReady(false)
 		if ctx.Err() != nil {
 			return nil
 		}
@@ -120,6 +161,7 @@ func (p *Plugin) runNRI(ctx context.Context) error {
 		case <-time.After(backoff):
 		}
 		backoff = min(backoff*2, nriBackoffMax)
+		p.metrics.nriReconnects.Inc()
 	}
 }
 
@@ -135,6 +177,7 @@ func (p *Plugin) Synchronize(_ context.Context, pods []*api.PodSandbox, ctrs []*
 	p.tracked.reset(keys)
 	p.log.Info("synchronized with runtime", "pods", len(pods), "containers", len(ctrs))
 	p.sweepOrphans(time.Now())
+	p.setReady(true)
 	return nil, nil
 }
 
@@ -146,6 +189,7 @@ func (p *Plugin) CreateContainer(_ context.Context, pod *api.PodSandbox, ctr *ap
 		})
 	}
 	if !shouldInject(pod) {
+		p.metrics.skipped.WithLabelValues(skipNotEnabled).Inc()
 		log.Debug("skip: not enabled", "annotation", config.AnnoEnabled)
 		return nil, nil, nil
 	}
@@ -156,19 +200,22 @@ func (p *Plugin) CreateContainer(_ context.Context, pod *api.PodSandbox, ctr *ap
 		var err error
 		self, err = os.Executable()
 		if err != nil {
+			p.metrics.injectionErrors.Inc()
 			return nil, nil, fmt.Errorf("failed to determine plugin binary path: %w", err)
 		}
 	}
 
 	sourceCAFile := getenvOr(config.EnvCAFile, config.DefaultCAFile)
-	caFileForHook, err := stageDynamicCAFile(sourceCAFile, dynamicCARoot(), ctr)
+	caFileForHook, err := p.stageCA(sourceCAFile, ctr)
 	if err != nil {
+		p.metrics.injectionErrors.Inc()
 		_ = cleanupDynamicCAFile(dynamicCARoot(), ctr)
 		// An error here fails the container creation, so only return it
 		// under fail-closed; otherwise start the container uninjected.
 		if config.IsFailClosed(p.failPolicy) {
 			return nil, nil, err
 		}
+		p.metrics.skipped.WithLabelValues(skipInjectionError).Inc()
 		log.Error("failed to stage CA bundle, starting container without injection (fail-open)", "error", err)
 		return nil, nil, nil
 	}
@@ -205,10 +252,22 @@ func (p *Plugin) CreateContainer(_ context.Context, pod *api.PodSandbox, ctr *ap
 		Options:     []string{"bind", "ro"},
 	})
 	adjustment.AddHooks(&api.Hooks{CreateRuntime: []*api.Hook{hook}})
+	p.metrics.injected.Inc()
 	log.Info("inject", "ca_file", caFileForHook,
 		"processors.include", pod.GetAnnotations()[config.AnnoProcessorsInclude],
 		"processors.exclude", pod.GetAnnotations()[config.AnnoProcessorsExclude])
 	return adjustment, nil, nil
+}
+
+// stageCA reads the source CA bundle, updates the CA bundle metrics from it
+// and stages it for the container.
+func (p *Plugin) stageCA(sourceCAFile string, ctr *api.Container) (string, error) {
+	content, err := readSourceCAFile(sourceCAFile)
+	if err != nil {
+		return "", err
+	}
+	p.metrics.observeCABundle(content)
+	return stageDynamicCAFile(content, dynamicCARoot(), ctr)
 }
 
 func (p *Plugin) RemoveContainer(_ context.Context, pod *api.PodSandbox, ctr *api.Container) error {

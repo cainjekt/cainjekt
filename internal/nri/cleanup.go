@@ -85,6 +85,7 @@ func (p *Plugin) sweepOrphans(now time.Time) int {
 		}
 		removed++
 	}
+	p.metrics.orphansCleaned.Add(float64(removed))
 	if removed > 0 {
 		p.log.Info("orphan cleanup: removed stale CA directories", "count", removed)
 	}
