@@ -32,6 +32,8 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+
+	chrootfs "github.com/tsuzu/go-chrootfs"
 )
 
 // MaxReadSize caps reads of files that come from a container image. Real trust
@@ -41,18 +43,22 @@ const MaxReadSize = 16 << 20
 
 const maxSymlinkHops = 40
 
-// rootFS is the subset of go-chrootfs' Chroot used here. The implementation is
-// Linux-only (see containerfs_linux.go); elsewhere openRoot always fails.
-type rootFS interface {
-	Close() error
-	Open(name string) (*os.File, error)
-	OpenFile(name string, flag int, perm os.FileMode) (*os.File, error)
-	MkdirAll(name string, perm os.FileMode) error
-	Remove(name string) error
-	Rename(oldname, newname string) error
-	Lstat(name string) (os.FileInfo, error)
-	Readlink(name string) (string, error)
-	FS() fs.FS
+// CheckSupport reports whether the running kernel provides the openat2
+// RESOLVE_IN_ROOT semantics containerfs depends on (Linux 5.6+). Older kernels
+// and other operating systems are not supported.
+func CheckSupport() error {
+	if err := chrootfs.CheckSupport(); err != nil {
+		return fmt.Errorf("cainjekt requires Linux 5.6+ with openat2(RESOLVE_IN_ROOT): %w", err)
+	}
+	return nil
+}
+
+func openRoot(rootfs string) (*chrootfs.Chroot, error) {
+	r, err := chrootfs.New(rootfs)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open rootfs %s: %w", rootfs, err)
+	}
+	return r, nil
 }
 
 // PathInRootfs joins a container-absolute path onto the host rootfs path
@@ -76,7 +82,7 @@ func ResolveSymlinks(rootfs, containerPath string) (string, error) {
 	return resolve(root, containerPath)
 }
 
-func resolve(root rootFS, containerPath string) (string, error) {
+func resolve(root *chrootfs.Chroot, containerPath string) (string, error) {
 	remaining := splitContainerPath(containerPath)
 	resolved := make([]string, 0, len(remaining))
 	hops := 0
@@ -162,7 +168,7 @@ func ReadFile(rootfs, containerPath string) ([]byte, string, error) {
 	return data, resolved, err
 }
 
-func readRegular(root rootFS, rel string) ([]byte, error) {
+func readRegular(root *chrootfs.Chroot, rel string) ([]byte, error) {
 	// Lstat first so a device node is never opened: opening some devices has
 	// side effects of its own.
 	fi, err := root.Lstat(rel)
@@ -223,7 +229,7 @@ func WriteFile(rootfs, containerPath string, data []byte, fallbackMode os.FileMo
 	return resolved, nil
 }
 
-func atomicWrite(root rootFS, rel string, data []byte, fallbackMode os.FileMode) error {
+func atomicWrite(root *chrootfs.Chroot, rel string, data []byte, fallbackMode os.FileMode) error {
 	if fallbackMode == 0 {
 		fallbackMode = 0o644
 	}
