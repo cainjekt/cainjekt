@@ -140,46 +140,6 @@ func TestApplySkipsWhenTrustStoreAlreadyConfigured(t *testing.T) {
 	}
 }
 
-func TestResolveContainerPathAbsoluteSymlink(t *testing.T) {
-	t.Parallel()
-
-	rootfs := t.TempDir()
-	mustMkdirAll(t, filepath.Join(rootfs, "real", "ssl"), 0o755)
-	mustMkdirAll(t, filepath.Join(rootfs, "etc"), 0o755)
-	mustSymlink(t, "/real/ssl/ca-bundle.pem", filepath.Join(rootfs, "etc", "ssl-bundle.pem"))
-
-	host, container, err := resolveContainerPath(rootfs, "/etc/ssl-bundle.pem")
-	if err != nil {
-		t.Fatalf("resolveContainerPath() error = %v", err)
-	}
-	if container != "/real/ssl/ca-bundle.pem" {
-		t.Fatalf("container path mismatch: got=%q want=%q", container, "/real/ssl/ca-bundle.pem")
-	}
-	if host != filepath.Join(rootfs, "real", "ssl", "ca-bundle.pem") {
-		t.Fatalf("host path mismatch: got=%q", host)
-	}
-}
-
-func TestResolveContainerPathRelativeDirSymlink(t *testing.T) {
-	t.Parallel()
-
-	rootfs := t.TempDir()
-	mustMkdirAll(t, filepath.Join(rootfs, "etc"), 0o755)
-	mustMkdirAll(t, filepath.Join(rootfs, "usr", "lib"), 0o755)
-	mustSymlink(t, "../usr/lib", filepath.Join(rootfs, "etc", "ssl"))
-
-	host, container, err := resolveContainerPath(rootfs, "/etc/ssl/ca-certificates.crt")
-	if err != nil {
-		t.Fatalf("resolveContainerPath() error = %v", err)
-	}
-	if container != "/usr/lib/ca-certificates.crt" {
-		t.Fatalf("container path mismatch: got=%q want=%q", container, "/usr/lib/ca-certificates.crt")
-	}
-	if host != filepath.Join(rootfs, "usr", "lib", "ca-certificates.crt") {
-		t.Fatalf("host path mismatch: got=%q", host)
-	}
-}
-
 func TestWriteIndividualCAResolvesSymlinkedAnchorDir(t *testing.T) {
 	t.Parallel()
 

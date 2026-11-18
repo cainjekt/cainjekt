@@ -7,9 +7,9 @@ import (
 	"log/slog"
 	"os"
 
+	"github.com/cainjekt/cainjekt/internal/config"
 	"github.com/containerd/nri/pkg/api"
 	"github.com/containerd/nri/pkg/stub"
-	"github.com/cainjekt/cainjekt/internal/config"
 )
 
 type Plugin struct {

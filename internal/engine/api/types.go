@@ -1,5 +1,10 @@
 package api
 
+import (
+	"fmt"
+	"os"
+)
+
 type FactKey string
 
 const (
@@ -91,4 +96,14 @@ type Context struct {
 
 func (c *Context) AddResult(r ProcessorResult) {
 	c.Results = append(c.Results, r)
+}
+
+// ReadCABundle reads the organization CA bundle staged by the NRI plugin. It
+// is a plugin-owned host path, not part of the (untrusted) container rootfs.
+func (c *Context) ReadCABundle() ([]byte, error) {
+	b, err := os.ReadFile(c.CAFile)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read CA bundle file %s: %w", c.CAFile, err)
+	}
+	return b, nil
 }

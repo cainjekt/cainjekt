@@ -1,0 +1,30 @@
+version: "2"
+
+linters:
+  default: standard
+  enable:
+    - forbidigo
+    - misspell
+  settings:
+    forbidigo:
+      # Hook-phase code works on an untrusted container rootfs and runs as root
+      # in the host mount namespace. It must go through internal/util/containerfs,
+      # which confines every access to the rootfs.
+      forbid:
+        - pattern: ^(os\.(ReadFile|Open|OpenFile|OpenRoot|Create|CreateTemp|WriteFile|Stat|Lstat|Mkdir|MkdirAll|Remove|RemoveAll|Rename|Readlink|Symlink|Link|Chmod|Chown|Lchown|Truncate|ReadDir)|filepath\.(Glob|Walk|WalkDir|EvalSymlinks)|fsx\.AtomicWrite)$
+          msg: container rootfs is untrusted; use internal/util/containerfs
+  exclusions:
+    presets:
+      - std-error-handling
+    rules:
+      - path-except: ^internal/(engine/processors|runtime/(hook|hookctx))/
+        linters:
+          - forbidigo
+      - path: _test\.go$
+        linters:
+          - forbidigo
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
