@@ -51,3 +51,23 @@ func TestWriteAndRead(t *testing.T) {
 		t.Fatalf("Detected category mismatch: %#v", out.Detected)
 	}
 }
+
+func TestWriteDoesNotFollowImageSymlinkToHost(t *testing.T) {
+	rootfs := t.TempDir()
+	hostDir := t.TempDir()
+	t.Setenv(config.EnvHookContextFile, config.HookContextFile)
+	if err := os.MkdirAll(filepath.Join(rootfs, "etc"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// Malicious image: /etc/cainjekt -> <host directory>
+	if err := os.Symlink(hostDir, filepath.Join(rootfs, "etc", "cainjekt")); err != nil {
+		t.Fatal(err)
+	}
+	ctx := &hookapi.Context{Facts: hookapi.NewMapFactStore()}
+	if err := Write(rootfs, NewStateFromContext(ctx, nil)); err != nil {
+		t.Fatalf("Write() error = %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(hostDir, filepath.Base(config.HookContextFile))); !os.IsNotExist(err) {
+		t.Fatalf("hook context escaped to host directory (stat err = %v)", err)
+	}
+}

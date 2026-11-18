@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/containerd/nri/pkg/api"
 	"github.com/cainjekt/cainjekt/internal/config"
+	"github.com/containerd/nri/pkg/api"
 )
 
 func TestCreateContainerStagesDynamicCAForHook(t *testing.T) {

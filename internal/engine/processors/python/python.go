@@ -67,7 +67,6 @@ func (p *processor) ApplyWrapper(ctx *hookapi.Context) error {
 	return nil
 }
 
-// TODO: Make rootfs binary detection handle absolute symlinks without resolving them on the host.
 func hasPythonBinary(rootfs string) bool {
 	return containerfs.HasAnyRegularFile(rootfs, pythonBinaryCandidates)
 }

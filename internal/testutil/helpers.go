@@ -1,6 +1,7 @@
 package testutil
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -28,4 +29,16 @@ func EnvValue(env []string, key string) string {
 		}
 	}
 	return ""
+}
+
+// RunIfContainerfsSupported runs the package's tests only where containerfs
+// works (Linux 5.6+ with openat2 RESOLVE_IN_ROOT). Use it from TestMain in
+// packages whose tests access a container rootfs; elsewhere (e.g. macOS) the
+// package is reported as skipped. CI runs on Linux.
+func RunIfContainerfsSupported(m *testing.M) {
+	if err := containerfs.CheckSupport(); err != nil {
+		fmt.Fprintf(os.Stderr, "SKIP: %v\n", err)
+		os.Exit(0)
+	}
+	os.Exit(m.Run())
 }

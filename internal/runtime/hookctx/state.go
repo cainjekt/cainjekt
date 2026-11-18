@@ -4,12 +4,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/cainjekt/cainjekt/internal/config"
 	hookapi "github.com/cainjekt/cainjekt/internal/engine/api"
-	"github.com/cainjekt/cainjekt/pkg/fsx"
+	"github.com/cainjekt/cainjekt/internal/util/containerfs"
 )
 
 type DetectedProcessor struct {
@@ -71,29 +70,24 @@ func (s State) ToHookContext() *hookapi.Context {
 	}
 }
 
+// Write persists the wrapper state inside the container rootfs. The rootfs is
+// untrusted, so the write is confined with containerfs: a symlinked
+// /etc/cainjekt in the image can never redirect it to the host.
 func Write(rootfs string, state State) error {
-	containerPath := contextFilePath()
-	hostPath := pathInRootfs(rootfs, containerPath)
-	if err := os.MkdirAll(filepath.Dir(hostPath), 0o755); err != nil {
-		return fmt.Errorf("failed to create hook context dir %s: %w", filepath.Dir(hostPath), err)
-	}
 	b, err := json.Marshal(state)
 	if err != nil {
 		return fmt.Errorf("failed to marshal hook context: %w", err)
 	}
-	if err := fsx.AtomicWrite(hostPath, append(b, '\n'), fsx.WriteOptions{
-		FallbackMode:  0o644,
-		RefuseSymlink: true,
-		PreserveOwner: true,
-	}); err != nil {
-		return fmt.Errorf("failed to write hook context file %s: %w", hostPath, err)
+	if _, err := containerfs.WriteFile(rootfs, contextFilePath(), append(b, '\n'), 0o644); err != nil {
+		return fmt.Errorf("failed to write hook context file: %w", err)
 	}
 	return nil
 }
 
 func Read() (State, error) {
 	p := contextFilePath()
-	b, err := os.ReadFile(p)
+	// Read runs inside the container (wrapper), on its own filesystem.
+	b, err := os.ReadFile(p) //nolint:forbidigo // not hook-phase: runs in the container
 	if err != nil {
 		if os.IsNotExist(err) {
 			return State{}, nil
@@ -118,11 +112,6 @@ func contextFilePath() string {
 		return p
 	}
 	return config.HookContextFile
-}
-
-func pathInRootfs(rootfs, containerPath string) string {
-	trimmed := strings.TrimPrefix(containerPath, "/")
-	return filepath.Join(rootfs, filepath.FromSlash(trimmed))
 }
 
 func cloneStringMap(in map[string]string) map[string]string {

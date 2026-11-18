@@ -7,9 +7,10 @@ import (
 	"log/slog"
 	"os"
 
+	"github.com/cainjekt/cainjekt/internal/config"
+	"github.com/cainjekt/cainjekt/internal/util/containerfs"
 	"github.com/containerd/nri/pkg/api"
 	"github.com/containerd/nri/pkg/stub"
-	"github.com/cainjekt/cainjekt/internal/config"
 )
 
 type Plugin struct {
@@ -29,6 +30,13 @@ func Run(log *slog.Logger, args []string) error {
 	fs.StringVar(&pluginIdx, "idx", "", "plugin index to register to NRI")
 	fs.StringVar(&socketPath, "socket", "", "path to the plugin socket")
 	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	// The OCI hook confines all container rootfs access with openat2
+	// RESOLVE_IN_ROOT (Linux 5.6+). Refuse to start on unsupported kernels
+	// rather than injecting hooks that cannot work safely.
+	if err := containerfs.CheckSupport(); err != nil {
 		return err
 	}
 
