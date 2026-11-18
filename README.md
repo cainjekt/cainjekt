@@ -75,6 +75,24 @@ make kind-load
 - containerd v2.0+ (NRI enabled by default) or v1.x with NRI manually enabled
 - CA certificate bundle to inject
 
+## How Injection Works
+
+For every container of a pod annotated with `cainjekt.tsuzu.dev/enabled: "true"`:
+
+1. **NRI plugin (`CreateContainer`)** stages the CA bundle under `/run/cainjekt/containers/<container-id>/` on the node, adds an OCI `createRuntime` hook and wraps the entrypoint with `/cainjekt-entrypoint`.
+2. **OCI hook** (runs on the node before the container starts) detects the distro and merges the CA into the image's trust store inside the container's writable layer. It only touches the container rootfs through a confined API (symlinks are resolved as the container sees them and can never reach the host).
+3. **Entrypoint wrapper** (PID 1) sets language-specific variables (e.g. `NODE_EXTRA_CA_CERTS`, `SSL_CERT_FILE`, `REQUESTS_CA_BUNDLE`) and `exec`s the original command.
+
+By default every step is **fail-open**: an injection problem is logged and the container starts without (part of) the CA configuration. See `CAINJEKT_FAIL_POLICY`.
+
+## Limitations
+
+- **CA rotation applies to new containers only.** The bundle is copied when a container is created. After updating the ConfigMap, restart workloads (e.g. `kubectl rollout restart`) to pick up the new CA. Running containers keep the old bundle until they are recreated.
+- **`kubectl exec`.** Processes started with `kubectl exec` do not go through the entrypoint wrapper. They still see the updated OS trust store; language variables set only by the wrapper are not visible to them (see #9).
+- **Read-only root filesystems.** With `readOnlyRootFilesystem: true` the trust store cannot be updated in place.
+- **Images that bundle their own trust store** (e.g. Python `certifi`, JVM `cacerts`, statically embedded roots) are only covered where a language processor exists.
+- **Only containerd with NRI** is supported (CRI-O NRI is untested).
+
 ## License
 
 See LICENSE file for details.
