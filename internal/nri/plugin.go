@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -19,6 +20,9 @@ type Plugin struct {
 	stub    stub.Stub
 	log     *slog.Logger
 	tracked *tracker
+
+	failPolicy     string
+	hookTimeoutSec int
 }
 
 // NRI reconnect backoff. A containerd restart drops the connection;
@@ -51,6 +55,14 @@ func Run(log *slog.Logger, args []string) error {
 	}
 
 	p := newPlugin(log)
+	var err error
+	if p.failPolicy, err = config.ParseFailPolicy(os.Getenv(config.EnvFailPolicy)); err != nil {
+		return err
+	}
+	if p.hookTimeoutSec, err = config.ParseHookTimeoutSec(os.Getenv(config.EnvHookTimeoutSec)); err != nil {
+		return err
+	}
+	log.Info("starting", "fail_policy", p.failPolicy, "hook_timeout_sec", p.hookTimeoutSec)
 	// No WithOnClose: a lost connection makes stub.Run return and runNRI
 	// reconnects.
 	var opts []stub.Option
@@ -152,7 +164,14 @@ func (p *Plugin) CreateContainer(_ context.Context, pod *api.PodSandbox, ctr *ap
 	caFileForHook, err := stageDynamicCAFile(sourceCAFile, dynamicCARoot(), ctr)
 	if err != nil {
 		_ = cleanupDynamicCAFile(dynamicCARoot(), ctr)
-		return nil, nil, err
+		// An error here fails the container creation, so only return it
+		// under fail-closed; otherwise start the container uninjected.
+		if config.IsFailClosed(p.failPolicy) {
+			return nil, nil, err
+		}
+		p.log.Error("failed to stage CA bundle, starting container without injection (fail-open)",
+			"namespace", pod.GetNamespace(), "pod", pod.GetName(), "container", ctr.GetName(), "error", err)
+		return nil, nil, nil
 	}
 	if key, err := containerCAKey(ctr); err == nil {
 		p.tracked.add(key)
@@ -163,14 +182,17 @@ func (p *Plugin) CreateContainer(_ context.Context, pod *api.PodSandbox, ctr *ap
 		Env: []string{
 			config.EnvHookMode + "=" + config.ModeCreateRT,
 			config.EnvCAFile + "=" + caFileForHook,
-			config.EnvFailPolicy + "=" + config.FailPolicyOpen,
+			config.EnvFailPolicy + "=" + p.failPolicy,
+			config.EnvHookTimeoutSec + "=" + strconv.Itoa(p.hookTimeoutSec),
 			config.EnvHookContextFile + "=" + config.HookContextFile,
 		},
-		Timeout: api.Int(config.DefaultHookTimeoutSec),
+		Timeout: api.Int(p.hookTimeoutSec),
 	}
 
 	adjustment := &api.ContainerAdjustment{}
 	adjustment.AddEnv(config.EnvWrapperMode, "1")
+	// The wrapper falls back to this when the hook context is unreadable.
+	adjustment.AddEnv(config.EnvFailPolicy, p.failPolicy)
 	if !hasEnv(ctr.GetEnv(), config.EnvHookContextFile) {
 		adjustment.AddEnv(config.EnvHookContextFile, config.HookContextFile)
 	}

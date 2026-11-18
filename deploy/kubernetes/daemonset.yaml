@@ -56,6 +56,14 @@ spec:
           value: /run/cainjekt/containers
         - name: CAINJEKT_PLUGIN_BINARY_PATH
           value: /opt/cainjekt/bin/cainjekt
+        # fail-open (default): CA injection problems never block a container.
+        # fail-closed: injection errors fail the container start.
+        - name: CAINJEKT_FAIL_POLICY
+          value: fail-open
+        # OCI hook timeout in seconds (2-120). The hook gives up 1s earlier
+        # by itself so fail-open is honored.
+        - name: CAINJEKT_HOOK_TIMEOUT_SEC
+          value: "20"
         - name: NODE_NAME
           valueFrom:
             fieldRef:
