@@ -18,6 +18,7 @@ func newPlugin(log *slog.Logger) *Plugin {
 	return &Plugin{
 		log:            log,
 		tracked:        newTracker(),
+		metrics:        newMetrics(),
 		failPolicy:     config.FailPolicyOpen,
 		hookTimeoutSec: config.DefaultHookTimeoutSec,
 	}
