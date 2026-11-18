@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path"
 	"strings"
 
 	"github.com/cainjekt/cainjekt/internal/config"
@@ -11,6 +12,7 @@ import (
 	"github.com/cainjekt/cainjekt/internal/engine/processors"
 	"github.com/cainjekt/cainjekt/internal/runtime/hookctx"
 	"github.com/cainjekt/cainjekt/internal/util/oci"
+	rs "github.com/opencontainers/runtime-spec/specs-go"
 )
 
 func Run(log *slog.Logger) error {
@@ -30,13 +32,14 @@ func Run(log *slog.Logger) error {
 	}
 
 	ctx := &hookapi.Context{
-		Mode:        mode,
-		Bundle:      state.Bundle,
-		Annotations: state.Annotations,
-		Rootfs:      oci.ResolveRootfsPath(state.Bundle, spec),
-		CAFile:      getenvOr(config.EnvCAFile, config.DefaultCAFile),
-		FailPolicy:  getenvOr(config.EnvFailPolicy, config.FailPolicyOpen),
-		Facts:       hookapi.NewMapFactStore(),
+		Mode:           mode,
+		Bundle:         state.Bundle,
+		Annotations:    state.Annotations,
+		Rootfs:         oci.ResolveRootfsPath(state.Bundle, spec),
+		ContainerCADir: stagedCAMount(spec),
+		CAFile:         getenvOr(config.EnvCAFile, config.DefaultCAFile),
+		FailPolicy:     getenvOr(config.EnvFailPolicy, config.FailPolicyOpen),
+		Facts:          hookapi.NewMapFactStore(),
 	}
 
 	all := processors.Default()
@@ -94,4 +97,15 @@ func getenvOr(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+// stagedCAMount returns config.ContainerCADir if the NRI plugin bind-mounted
+// the staged CA directory into this container.
+func stagedCAMount(spec *rs.Spec) string {
+	for _, m := range spec.Mounts {
+		if path.Clean(m.Destination) == config.ContainerCADir {
+			return config.ContainerCADir
+		}
+	}
+	return ""
 }

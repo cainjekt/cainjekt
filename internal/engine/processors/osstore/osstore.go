@@ -9,7 +9,9 @@ import (
 	"os"
 	"path"
 	"strings"
+	"syscall"
 
+	"github.com/cainjekt/cainjekt/internal/config"
 	hookapi "github.com/cainjekt/cainjekt/internal/engine/api"
 	"github.com/cainjekt/cainjekt/internal/util/containerfs"
 	"github.com/cainjekt/cainjekt/pkg/certs"
@@ -150,30 +152,56 @@ func (p *processor) Apply(ctx *hookapi.Context) error {
 		return err
 	}
 
-	if merged.Added > 0 {
-		if _, err := containerfs.WriteFile(ctx.Rootfs, resolved, merged.Merged, 0o644); err != nil {
-			return fmt.Errorf("failed to write trust store: %w", err)
+	// Refine the staged merged bundle (seeded by the plugin with its own
+	// roots) with the container's actual store. Only do so when the image has
+	// a store: <nothing + org CA> would drop all public roots.
+	if ctx.ContainerCADir != "" && certs.CountCertificates(current) > 0 {
+		if err := ctx.StageFile(config.MergedCAFileName, merged.Merged); err != nil {
+			return err
 		}
-		// Alpine images often use /etc/ssl/cert.pem as curl/OpenSSL default.
-		if p.distro == "alpine" {
-			if err := writeAlpineCertPEM(ctx.Rootfs, resolved, merged.Merged); err != nil {
-				return err
+	}
+
+	storePath := resolved
+	if merged.Added > 0 {
+		_, werr := writeRootfsFile(ctx.Rootfs, resolved, merged.Merged, 0o644)
+		if werr == nil && p.distro == "alpine" {
+			// Alpine images often use /etc/ssl/cert.pem as curl/OpenSSL default.
+			werr = writeAlpineCertPEM(ctx.Rootfs, resolved, merged.Merged)
+		}
+		if werr != nil {
+			fallback, ok := stagedFallback(ctx, werr)
+			if !ok {
+				return fmt.Errorf("failed to write trust store: %w", werr)
 			}
+			storePath = fallback
 		}
 	}
 
 	individualCAPath, err := writeIndividualCA(ctx.Rootfs, p.anchorDir, orgCA)
 	if err != nil {
-		return err
+		if _, ok := stagedFallback(ctx, err); !ok {
+			return err
+		}
+		individualCAPath = config.ContainerOrgCA
 	}
 
-	ctx.Facts.Set(hookapi.FactTrustStorePath, resolved)
+	ctx.Facts.Set(hookapi.FactTrustStorePath, storePath)
 	ctx.Facts.Set(hookapi.FactTrustStoreKind, "bundle")
 	ctx.Facts.Set(hookapi.FactDistro, p.distro)
 	if individualCAPath != "" {
 		ctx.Facts.Set(hookapi.FactIndividualCAPath, individualCAPath)
 	}
 	return nil
+}
+
+// stagedFallback handles a read-only rootfs (readOnlyRootFilesystem): the
+// trust store cannot be updated in place, but the plugin-mounted staged
+// directory holds a merged bundle the wrapper can point env vars at.
+func stagedFallback(ctx *hookapi.Context, err error) (string, bool) {
+	if ctx.ContainerCADir == "" || !errors.Is(err, syscall.EROFS) {
+		return "", false
+	}
+	return config.ContainerMergedCA, true
 }
 
 // writeAlpineCertPEM keeps /etc/ssl/cert.pem in sync with the merged bundle.
@@ -188,7 +216,7 @@ func writeAlpineCertPEM(rootfs, mainBundle string, merged []byte) error {
 	if resolved == mainBundle {
 		return nil
 	}
-	if _, err := containerfs.WriteFile(rootfs, resolved, merged, 0o644); err != nil {
+	if _, err := writeRootfsFile(rootfs, resolved, merged, 0o644); err != nil {
 		return fmt.Errorf("failed to write alpine default cert path: %w", err)
 	}
 	return nil
@@ -281,7 +309,7 @@ func writeIndividualCA(rootfs, anchorDir string, content []byte) (string, error)
 		return "", nil
 	}
 	target := path.Join(anchorDir, individualCAFileName)
-	resolved, err := containerfs.WriteFile(rootfs, target, content, 0o644)
+	resolved, err := writeRootfsFile(rootfs, target, content, 0o644)
 	if err != nil {
 		return "", fmt.Errorf("failed to write individual CA file %s: %w", target, err)
 	}
@@ -305,3 +333,6 @@ func (p *processor) matches(info osRelease) bool {
 	}
 	return false
 }
+
+// writeRootfsFile is replaced in tests.
+var writeRootfsFile = containerfs.WriteFile
