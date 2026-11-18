@@ -5,7 +5,6 @@ go 1.25.5
 require (
 	github.com/containerd/nri v0.11.0
 	github.com/opencontainers/runtime-spec v1.3.0
-	github.com/pavlo-v-chernykh/keystore-go/v4 v4.5.0
 	github.com/tsuzu/go-chrootfs v0.2.1
 	software.sslmate.com/src/go-pkcs12 v0.7.2
 )
