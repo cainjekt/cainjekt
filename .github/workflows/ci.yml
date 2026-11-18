@@ -78,3 +78,45 @@ jobs:
           # read-only root filesystem and no capabilities, as in the DaemonSet.
           docker run --rm --read-only --cap-drop=ALL --security-opt=no-new-privileges \
             --tmpfs /host/opt/cainjekt cainjekt:ci-test install --dest /host/opt/cainjekt/bin/cainjekt
+
+  helm:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.19.0
+
+      - name: Lint chart
+        run: helm lint charts/cainjekt
+
+      - name: Render chart
+        run: |
+          printf -- '-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----\n' > /tmp/ca.pem
+          helm template cainjekt charts/cainjekt -n kube-system > /dev/null
+          helm template cainjekt charts/cainjekt -n kube-system \
+            --set caBundle.source=inline --set-file caBundle.inline=/tmp/ca.pem > /dev/null
+          helm template cainjekt charts/cainjekt -n kube-system \
+            --set caBundle.source=clusterTrustBundle \
+            --set caBundle.clusterTrustBundle.signerName=example.com/org \
+            --set caBundle.clusterTrustBundle.labelSelector.matchLabels.trust=org > /dev/null
+          helm template cainjekt charts/cainjekt -n kube-system \
+            --set httpServer.enabled=true \
+            --set probes.liveness.enabled=true --set probes.readiness.enabled=true \
+            --set metrics.serviceMonitor.enabled=true > /dev/null
+          # Invalid combinations must fail.
+          for args in "--set caBundle.source=clusterTrustBundle" \
+                      "--set probes.readiness.enabled=true" \
+                      "--set hookTimeoutSec=500"; do
+            if helm template cainjekt charts/cainjekt $args > /dev/null 2>&1; then
+              echo "expected failure: $args"; exit 1
+            fi
+          done
+
+      - name: Render kustomize manifests
+        run: kubectl kustomize deploy/kubernetes > /dev/null

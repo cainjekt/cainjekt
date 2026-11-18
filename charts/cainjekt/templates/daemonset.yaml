@@ -1,0 +1,188 @@
+{{- $caSource := include "cainjekt.caSource" . }}
+{{- $http := include "cainjekt.httpEnabled" . }}
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: {{ include "cainjekt.fullname" . }}
+  namespace: {{ include "cainjekt.namespace" . }}
+  labels:
+    {{- include "cainjekt.labels" . | nindent 4 }}
+  {{- with .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "cainjekt.selectorLabels" . | nindent 6 }}
+  {{- with .Values.updateStrategy }}
+  updateStrategy:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  template:
+    metadata:
+      labels:
+        {{- include "cainjekt.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      serviceAccountName: {{ include "cainjekt.serviceAccountName" . }}
+      # The plugin talks to containerd over the NRI socket only.
+      automountServiceAccountToken: false
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.priorityClassName }}
+      priorityClassName: {{ . }}
+      {{- end }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      initContainers:
+        # Copies the binary to host /opt/cainjekt/bin/cainjekt, where
+        # containerd runs it as an OCI hook and bind-mounts it into containers.
+        - name: install-plugin-binary
+          image: {{ include "cainjekt.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+            - install
+            - --dest=/host/opt/cainjekt/bin/cainjekt
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: plugin-install-dir
+              mountPath: /host/opt/cainjekt
+          {{- with .Values.installerResources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      containers:
+        - name: cainjekt
+          image: {{ include "cainjekt.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          env:
+            - name: CAINJEKT_CA_FILE
+              value: /etc/cainjekt/ca-bundle.pem
+            - name: CAINJEKT_DYNAMIC_CA_ROOT
+              value: /run/cainjekt/containers
+            # Host path of the installed binary; resolved by containerd.
+            - name: CAINJEKT_PLUGIN_BINARY_PATH
+              value: /opt/cainjekt/bin/cainjekt
+            - name: CAINJEKT_FAIL_POLICY
+              value: {{ .Values.failPolicy | quote }}
+            - name: CAINJEKT_HOOK_TIMEOUT_SEC
+              value: {{ .Values.hookTimeoutSec | toString | quote }}
+            - name: CAINJEKT_LOG_LEVEL
+              value: {{ .Values.logLevel | quote }}
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          args:
+            - --name={{ .Values.plugin.name }}
+            - --idx={{ .Values.plugin.index }}
+            {{- if $http }}
+            - --http-addr=:{{ .Values.httpServer.port }}
+            {{- end }}
+          {{- if $http }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.httpServer.port }}
+              protocol: TCP
+          {{- end }}
+          {{- with .Values.probes.liveness }}
+          {{- if .enabled }}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            {{- toYaml (omit . "enabled") | nindent 12 }}
+          {{- end }}
+          {{- end }}
+          {{- with .Values.probes.readiness }}
+          {{- if .enabled }}
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            {{- toYaml (omit . "enabled") | nindent 12 }}
+          {{- end }}
+          {{- end }}
+          volumeMounts:
+            - name: nri-socket
+              mountPath: /var/run/nri
+            - name: ca-bundle
+              mountPath: /etc/cainjekt
+              readOnly: true
+            - name: dynamic-ca-root
+              mountPath: /run/cainjekt
+          {{- with .Values.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      volumes:
+        - name: nri-socket
+          hostPath:
+            path: /var/run/nri
+            type: DirectoryOrCreate
+        - name: ca-bundle
+          {{- if eq $caSource "clusterTrustBundle" }}
+          {{- $ctb := .Values.caBundle.clusterTrustBundle }}
+          projected:
+            sources:
+              - clusterTrustBundle:
+                  {{- if $ctb.name }}
+                  name: {{ $ctb.name | quote }}
+                  {{- else }}
+                  signerName: {{ $ctb.signerName | quote }}
+                  {{- with $ctb.labelSelector }}
+                  labelSelector:
+                    {{- toYaml . | nindent 20 }}
+                  {{- end }}
+                  {{- end }}
+                  optional: {{ $ctb.optional }}
+                  path: ca-bundle.pem
+          {{- else }}
+          configMap:
+            name: {{ include "cainjekt.caBundleConfigMapName" . }}
+            optional: false
+            items:
+              - key: {{ ternary "ca-bundle.pem" .Values.caBundle.configMap.key (eq $caSource "inline") | quote }}
+                path: ca-bundle.pem
+          {{- end }}
+        - name: dynamic-ca-root
+          hostPath:
+            path: /run/cainjekt
+            type: DirectoryOrCreate
+        - name: plugin-install-dir
+          hostPath:
+            path: /opt/cainjekt
+            type: DirectoryOrCreate

@@ -1,0 +1,18 @@
+apiVersion: v2
+name: cainjekt
+description: Inject an organization CA into Kubernetes containers via a containerd NRI plugin
+type: application
+version: 0.1.0
+# Image tag used when image.tag is empty. Set to the release version when
+# releasing; the chart needs an image that has `cainjekt install`.
+appVersion: "latest"
+kubeVersion: ">=1.25.0-0"
+home: https://github.com/cainjekt/cainjekt
+sources:
+  - https://github.com/cainjekt/cainjekt
+keywords:
+  - certificates
+  - ca-injection
+  - nri
+  - containerd
+  - tls
