@@ -1,3 +1,6 @@
+// Package osstore provides processors that add the CA to the distribution
+// trust store of the container image (Debian, RHEL, openSUSE, Alpine, Arch,
+// and a generic fallback).
 package osstore
 
 import (
@@ -27,6 +30,7 @@ type processor struct {
 	fallback   bool
 }
 
+// NewDebian returns the processor for Debian and Ubuntu images.
 func NewDebian() hookapi.Processor {
 	return &processor{
 		name:       "os-debian",
@@ -38,6 +42,8 @@ func NewDebian() hookapi.Processor {
 	}
 }
 
+// NewRHEL returns the processor for RHEL-family images (Fedora, CentOS,
+// Rocky, AlmaLinux, Oracle Linux, Amazon Linux).
 func NewRHEL() hookapi.Processor {
 	return &processor{
 		name:       "os-rhel",
@@ -49,6 +55,7 @@ func NewRHEL() hookapi.Processor {
 	}
 }
 
+// NewOpenSUSE returns the processor for openSUSE and SLES images.
 func NewOpenSUSE() hookapi.Processor {
 	return &processor{
 		name:       "os-opensuse",
@@ -60,6 +67,7 @@ func NewOpenSUSE() hookapi.Processor {
 	}
 }
 
+// NewAlpine returns the processor for Alpine images.
 func NewAlpine() hookapi.Processor {
 	return &processor{
 		name:       "os-alpine",
@@ -71,6 +79,7 @@ func NewAlpine() hookapi.Processor {
 	}
 }
 
+// NewArch returns the processor for Arch Linux images.
 func NewArch() hookapi.Processor {
 	return &processor{
 		name:       "os-arch",
@@ -82,6 +91,9 @@ func NewArch() hookapi.Processor {
 	}
 }
 
+// NewFallback returns the lowest-priority processor, used when the
+// distribution is unknown or unsupported; it targets the first well-known
+// bundle path found.
 func NewFallback() hookapi.Processor {
 	return &processor{
 		name:   "os-fallback",

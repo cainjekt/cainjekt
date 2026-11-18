@@ -1,3 +1,4 @@
+// Package api defines the types shared by the hook engine and its processors.
 package api
 
 import (
@@ -5,8 +6,10 @@ import (
 	"os"
 )
 
+// FactKey names a fact processors share through a FactStore.
 type FactKey string
 
+// Well-known fact keys.
 const (
 	FactTrustStorePath   FactKey = "trust_store_path"
 	FactTrustStoreKind   FactKey = "trust_store_kind"
@@ -14,12 +17,16 @@ const (
 	FactIndividualCAPath FactKey = "individual_ca_path"
 )
 
+// DetectResult reports whether a processor applies to a container and, if
+// so, with which priority (higher runs first).
 type DetectResult struct {
 	Applicable bool
 	Reason     string
 	Priority   int
 }
 
+// Processor detects a runtime or trust store in the container and injects the
+// CA into it.
 type Processor interface {
 	Name() string
 	Category() string
@@ -33,6 +40,7 @@ type WrapperProcessor interface {
 	ApplyWrapper(*Context) error
 }
 
+// ProcessorResult records the outcome of one processor.
 type ProcessorResult struct {
 	Name     string
 	Category string
@@ -42,29 +50,35 @@ type ProcessorResult struct {
 	Reason   string
 }
 
+// FactStore holds facts discovered by processors for later ones.
 type FactStore interface {
 	Set(FactKey, string)
 	Get(FactKey) (string, bool)
 	Snapshot() map[FactKey]string
 }
 
+// MapFactStore is a map-backed FactStore.
 type MapFactStore struct {
 	values map[FactKey]string
 }
 
+// NewMapFactStore returns an empty MapFactStore.
 func NewMapFactStore() *MapFactStore {
 	return &MapFactStore{values: map[FactKey]string{}}
 }
 
+// Set stores value under key.
 func (s *MapFactStore) Set(key FactKey, value string) {
 	s.values[key] = value
 }
 
+// Get returns the value stored under key.
 func (s *MapFactStore) Get(key FactKey) (string, bool) {
 	v, ok := s.values[key]
 	return v, ok
 }
 
+// Snapshot returns a copy of all stored facts.
 func (s *MapFactStore) Snapshot() map[FactKey]string {
 	out := make(map[FactKey]string, len(s.values))
 	for k, v := range s.values {
@@ -73,6 +87,7 @@ func (s *MapFactStore) Snapshot() map[FactKey]string {
 	return out
 }
 
+// NewMapFactStoreFromSnapshot returns a MapFactStore holding a copy of values.
 func NewMapFactStoreFromSnapshot(values map[FactKey]string) *MapFactStore {
 	out := NewMapFactStore()
 	for k, v := range values {
@@ -81,6 +96,8 @@ func NewMapFactStoreFromSnapshot(values map[FactKey]string) *MapFactStore {
 	return out
 }
 
+// Context carries the container being processed and the accumulated facts
+// and results through the processors of a hook or wrapper run.
 type Context struct {
 	Mode        string
 	Bundle      string
@@ -94,6 +111,7 @@ type Context struct {
 	Results []ProcessorResult
 }
 
+// AddResult appends r to Results.
 func (c *Context) AddResult(r ProcessorResult) {
 	c.Results = append(c.Results, r)
 }

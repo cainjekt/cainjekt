@@ -429,23 +429,6 @@ func runCmdInput(t *testing.T, timeout time.Duration, input string, name string,
 	return out
 }
 
-func runCmdRetry(t *testing.T, attempts int, timeout time.Duration, name string, args ...string) string {
-	t.Helper()
-	var lastOut string
-	var lastErr error
-	for i := 1; i <= attempts; i++ {
-		out, err := runCmdWithInput(timeout, "", name, args...)
-		if err == nil {
-			return out
-		}
-		lastOut = out
-		lastErr = err
-		time.Sleep(time.Duration(i) * time.Second)
-	}
-	t.Fatalf("command failed after %d attempts: %s %s\nlast error: %v\noutput:\n%s", attempts, name, strings.Join(args, " "), lastErr, lastOut)
-	return ""
-}
-
 func tryCmd(timeout time.Duration, name string, args ...string) error {
 	_, err := runCmdWithInput(timeout, "", name, args...)
 	return err
