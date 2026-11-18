@@ -68,3 +68,15 @@ func parseCertPEMBlocks(data []byte) []*pem.Block {
 	}
 	return blocks
 }
+
+// CountCertificates returns the number of parseable certificates in a PEM
+// bundle.
+func CountCertificates(data []byte) int {
+	n := 0
+	for _, b := range parseCertPEMBlocks(data) {
+		if _, err := x509.ParseCertificate(b.Bytes); err == nil {
+			n++
+		}
+	}
+	return n
+}

@@ -3,6 +3,9 @@ package api
 import (
 	"fmt"
 	"os"
+	"path/filepath"
+
+	"github.com/cainjekt/cainjekt/pkg/fsx"
 )
 
 type FactKey string
@@ -87,8 +90,11 @@ type Context struct {
 	Annotations map[string]string
 	Rootfs      string
 	CAFile      string
-	FailPolicy  string
-	Env         []string
+	// ContainerCADir is the container path where the NRI plugin mounted the
+	// staged CA directory (the directory of CAFile), or "" if not mounted.
+	ContainerCADir string
+	FailPolicy     string
+	Env            []string
 
 	Facts   FactStore
 	Results []ProcessorResult
@@ -106,4 +112,18 @@ func (c *Context) ReadCABundle() ([]byte, error) {
 		return nil, fmt.Errorf("failed to read CA bundle file %s: %w", c.CAFile, err)
 	}
 	return b, nil
+}
+
+// StageFile atomically writes name into the plugin-owned staging directory
+// (the directory of CAFile on the host). When ContainerCADir is set, the file
+// is visible to the container at ContainerCADir/name.
+func (c *Context) StageFile(name string, data []byte) error {
+	if c.CAFile == "" || name == "" || filepath.Base(name) != name {
+		return fmt.Errorf("invalid staged file %q", name)
+	}
+	target := filepath.Join(filepath.Dir(c.CAFile), name)
+	if err := fsx.AtomicWrite(target, data, fsx.WriteOptions{FallbackMode: 0o644, RefuseSymlink: true}); err != nil {
+		return fmt.Errorf("failed to stage %s: %w", target, err)
+	}
+	return nil
 }
