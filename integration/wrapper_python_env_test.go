@@ -21,11 +21,12 @@ func TestWrapperIntegration_PythonEnvVarsAreApplied(t *testing.T) {
 	requireCommand(t, "sh")
 
 	statePath := filepath.Join(t.TempDir(), "hook-context.json")
-	want := "/usr/local/share/ca-certificates/cainjekt.crt"
+	want := "/etc/ssl/certs/ca-certificates.crt"
 	state := hookctx.State{
 		Context: hookctx.PersistedContext{
 			Facts: map[string]string{
-				string(hookapi.FactIndividualCAPath): want,
+				string(hookapi.FactTrustStorePath):   want,
+				string(hookapi.FactIndividualCAPath): "/usr/local/share/ca-certificates/cainjekt.crt",
 			},
 		},
 		Detected: []hookctx.DetectedProcessor{
