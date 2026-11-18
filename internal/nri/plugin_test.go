@@ -62,7 +62,7 @@ func TestCreateContainerStagesDynamicCAForHook(t *testing.T) {
 	}
 }
 
-func TestCreateContainerReturnsErrorWhenDynamicCAStagingFails(t *testing.T) {
+func TestCreateContainerReturnsErrorWhenDynamicCAStagingFailsFailClosed(t *testing.T) {
 	source := writeTempSourceCA(t)
 	rootFile := filepath.Join(t.TempDir(), "not-a-directory")
 	if err := os.WriteFile(rootFile, []byte("x"), 0o600); err != nil {
@@ -72,6 +72,7 @@ func TestCreateContainerReturnsErrorWhenDynamicCAStagingFails(t *testing.T) {
 	t.Setenv(config.EnvDynamicCARoot, rootFile)
 
 	p := newPlugin(slog.New(slog.NewTextHandler(io.Discard, nil)))
+	p.failPolicy = config.FailPolicyClosed
 	pod := &api.PodSandbox{
 		Namespace:   "default",
 		Name:        "pod-b",
@@ -129,11 +130,12 @@ func TestRemoveContainerCleansDynamicCADirectory(t *testing.T) {
 	}
 }
 
-func TestCreateContainerReturnsErrorWhenContainerIDEmpty(t *testing.T) {
+func TestCreateContainerReturnsErrorWhenContainerIDEmptyFailClosed(t *testing.T) {
 	t.Setenv(config.EnvCAFile, writeTempSourceCA(t))
 	t.Setenv(config.EnvDynamicCARoot, t.TempDir())
 
 	p := newPlugin(slog.New(slog.NewTextHandler(io.Discard, nil)))
+	p.failPolicy = config.FailPolicyClosed
 	pod := &api.PodSandbox{
 		Namespace:   "default",
 		Name:        "pod-d",
@@ -154,6 +156,57 @@ func TestCreateContainerReturnsErrorWhenContainerIDEmpty(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "container id is empty") {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+// Under fail-open, a staging failure must not fail the container creation.
+func TestCreateContainerSkipsInjectionWhenStagingFailsFailOpen(t *testing.T) {
+	t.Setenv(config.EnvCAFile, filepath.Join(t.TempDir(), "missing.pem"))
+	t.Setenv(config.EnvDynamicCARoot, t.TempDir())
+
+	p := newPlugin(slog.New(slog.NewTextHandler(io.Discard, nil)))
+	pod := &api.PodSandbox{Annotations: map[string]string{config.AnnoEnabled: "true"}}
+	ctr := &api.Container{Id: "c1", Args: []string{"sh"}}
+
+	adj, _, err := p.CreateContainer(context.Background(), pod, ctr)
+	if err != nil {
+		t.Fatalf("CreateContainer() error = %v, want nil under fail-open", err)
+	}
+	if adj != nil {
+		t.Fatalf("CreateContainer() should not inject when staging failed")
+	}
+}
+
+func TestCreateContainerPropagatesPolicyAndTimeout(t *testing.T) {
+	t.Setenv(config.EnvCAFile, writeTempSourceCA(t))
+	t.Setenv(config.EnvDynamicCARoot, t.TempDir())
+
+	p := newPlugin(slog.New(slog.NewTextHandler(io.Discard, nil)))
+	p.failPolicy = config.FailPolicyClosed
+	p.hookTimeoutSec = 42
+	pod := &api.PodSandbox{Annotations: map[string]string{config.AnnoEnabled: "true"}}
+	ctr := &api.Container{Id: "c2", Args: []string{"sh"}}
+
+	adj, _, err := p.CreateContainer(context.Background(), pod, ctr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := adj.GetHooks().GetCreateRuntime()[0]
+	if h.GetTimeout().GetValue() != 42 {
+		t.Fatalf("hook timeout = %v", h.GetTimeout())
+	}
+	if envValue(h.GetEnv(), config.EnvFailPolicy) != config.FailPolicyClosed ||
+		envValue(h.GetEnv(), config.EnvHookTimeoutSec) != "42" {
+		t.Fatalf("hook env = %v", h.GetEnv())
+	}
+	found := false
+	for _, kv := range adj.GetEnv() {
+		if kv.GetKey() == config.EnvFailPolicy && kv.GetValue() == config.FailPolicyClosed {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("container env lacks %s: %v", config.EnvFailPolicy, adj.GetEnv())
 	}
 }
 
