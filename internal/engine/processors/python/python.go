@@ -54,16 +54,20 @@ func (p *processor) ApplyWrapper(ctx *hookapi.Context) error {
 	if ctx == nil || ctx.Facts == nil {
 		return nil
 	}
-	individualCAPath, ok := ctx.Facts.Get(hookapi.FactIndividualCAPath)
+	// SSL_CERT_FILE and REQUESTS_CA_BUNDLE REPLACE the trust store, so they
+	// must point at the merged bundle (system roots + org CA). Pointing them at
+	// the bare org CA would break all public TLS. Without a merged bundle we
+	// leave them unset rather than degrade.
+	bundle, ok := ctx.Facts.Get(hookapi.FactTrustStorePath)
 	if !ok {
 		return nil
 	}
-	individualCAPath = strings.TrimSpace(individualCAPath)
-	if individualCAPath == "" {
+	bundle = strings.TrimSpace(bundle)
+	if bundle == "" {
 		return nil
 	}
-	ctx.Env = envutil.Upsert(ctx.Env, envSSLCAFile, individualCAPath)
-	ctx.Env = envutil.Upsert(ctx.Env, envRequestsCABundle, individualCAPath)
+	ctx.Env = envutil.Upsert(ctx.Env, envSSLCAFile, bundle)
+	ctx.Env = envutil.Upsert(ctx.Env, envRequestsCABundle, bundle)
 	return nil
 }
 

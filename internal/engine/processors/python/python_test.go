@@ -50,6 +50,7 @@ func TestApplyWrapperSetsPythonEnvVars(t *testing.T) {
 		Env:   []string{"PATH=/usr/bin"},
 		Facts: hookapi.NewMapFactStore(),
 	}
+	ctx.Facts.Set(hookapi.FactTrustStorePath, "/etc/ssl/certs/ca-certificates.crt")
 	ctx.Facts.Set(hookapi.FactIndividualCAPath, "/usr/local/share/ca-certificates/cainjekt.crt")
 
 	p := New().(*processor)
@@ -57,10 +58,10 @@ func TestApplyWrapperSetsPythonEnvVars(t *testing.T) {
 		t.Fatalf("ApplyWrapper() error = %v", err)
 	}
 
-	if got := testutil.EnvValue(ctx.Env, envSSLCAFile); got != "/usr/local/share/ca-certificates/cainjekt.crt" {
+	if got := testutil.EnvValue(ctx.Env, envSSLCAFile); got != "/etc/ssl/certs/ca-certificates.crt" {
 		t.Fatalf("env %q mismatch: got=%q", envSSLCAFile, got)
 	}
-	if got := testutil.EnvValue(ctx.Env, envRequestsCABundle); got != "/usr/local/share/ca-certificates/cainjekt.crt" {
+	if got := testutil.EnvValue(ctx.Env, envRequestsCABundle); got != "/etc/ssl/certs/ca-certificates.crt" {
 		t.Fatalf("env %q mismatch: got=%q", envRequestsCABundle, got)
 	}
 }
@@ -75,6 +76,7 @@ func TestApplyWrapperOverwritesExistingPythonEnvVars(t *testing.T) {
 		},
 		Facts: hookapi.NewMapFactStore(),
 	}
+	ctx.Facts.Set(hookapi.FactTrustStorePath, "/etc/ssl/certs/ca-certificates.crt")
 	ctx.Facts.Set(hookapi.FactIndividualCAPath, "/usr/local/share/ca-certificates/cainjekt.crt")
 
 	p := New().(*processor)
@@ -82,15 +84,31 @@ func TestApplyWrapperOverwritesExistingPythonEnvVars(t *testing.T) {
 		t.Fatalf("ApplyWrapper() error = %v", err)
 	}
 
-	if got := testutil.EnvValue(ctx.Env, envSSLCAFile); got != "/usr/local/share/ca-certificates/cainjekt.crt" {
+	if got := testutil.EnvValue(ctx.Env, envSSLCAFile); got != "/etc/ssl/certs/ca-certificates.crt" {
 		t.Fatalf("env %q mismatch: got=%q", envSSLCAFile, got)
 	}
-	if got := testutil.EnvValue(ctx.Env, envRequestsCABundle); got != "/usr/local/share/ca-certificates/cainjekt.crt" {
+	if got := testutil.EnvValue(ctx.Env, envRequestsCABundle); got != "/etc/ssl/certs/ca-certificates.crt" {
 		t.Fatalf("env %q mismatch: got=%q", envRequestsCABundle, got)
 	}
 }
 
-func TestApplyWrapperNoopWithoutIndividualCAPath(t *testing.T) {
+// The bare org CA must never be used for trust-replacing variables: it would
+// drop the system roots and break public TLS.
+func TestApplyWrapperIgnoresIndividualCAWithoutMergedBundle(t *testing.T) {
+	t.Parallel()
+
+	ctx := &hookapi.Context{Env: []string{"PATH=/usr/bin"}, Facts: hookapi.NewMapFactStore()}
+	ctx.Facts.Set(hookapi.FactIndividualCAPath, "/usr/local/share/ca-certificates/cainjekt.crt")
+
+	if err := New().(*processor).ApplyWrapper(ctx); err != nil {
+		t.Fatalf("ApplyWrapper() error = %v", err)
+	}
+	if got := testutil.EnvValue(ctx.Env, envSSLCAFile); got != "" {
+		t.Fatalf("env %q should not be set: got=%q", envSSLCAFile, got)
+	}
+}
+
+func TestApplyWrapperNoopWithoutTrustStore(t *testing.T) {
 	t.Parallel()
 
 	ctx := &hookapi.Context{
