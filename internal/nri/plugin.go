@@ -6,16 +6,33 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
+	"github.com/cainjekt/cainjekt/internal/config"
 	"github.com/containerd/nri/pkg/api"
 	"github.com/containerd/nri/pkg/stub"
-	"github.com/cainjekt/cainjekt/internal/config"
 )
 
 type Plugin struct {
 	stub stub.Stub
 	log  *slog.Logger
 }
+
+// NRI reconnect backoff. A containerd restart drops the connection;
+// reconnecting in-process instead of exiting avoids the kubelet's
+// CrashLoopBackOff, during which new containers would start without the CA.
+// After nriGiveUp without a lasting connection we exit and let the kubelet
+// restart the pod, in case the stub itself is wedged.
+const (
+	nriBackoffMin = 100 * time.Millisecond
+	nriBackoffMax = 2 * time.Second
+	nriGiveUp     = 2 * time.Minute
+	// A Run that lasted at least this long is considered to have connected,
+	// which resets the backoff and the give-up timer.
+	nriStableConn = 5 * time.Second
+)
 
 func Run(log *slog.Logger, args []string) error {
 	var (
@@ -33,7 +50,9 @@ func Run(log *slog.Logger, args []string) error {
 	}
 
 	p := newPlugin(log)
-	opts := []stub.Option{stub.WithOnClose(p.onClose)}
+	// No WithOnClose: a lost connection makes stub.Run return and runNRI
+	// reconnects.
+	var opts []stub.Option
 	if pluginName != "" {
 		opts = append(opts, stub.WithPluginName(pluginName))
 	}
@@ -49,10 +68,45 @@ func Run(log *slog.Logger, args []string) error {
 		return fmt.Errorf("failed to create plugin stub: %w", err)
 	}
 	p.stub = st
-	if err := p.stub.Run(context.Background()); err != nil {
+
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+	go func() {
+		<-ctx.Done()
+		st.Stop()
+	}()
+	if err := p.runNRI(ctx); err != nil {
 		return fmt.Errorf("plugin exited: %w", err)
 	}
+	p.log.Info("shutting down")
 	return nil
+}
+
+// runNRI keeps the plugin connected to the runtime until ctx is cancelled.
+func (p *Plugin) runNRI(ctx context.Context) error {
+	backoff := nriBackoffMin
+	failingSince := time.Time{}
+	for {
+		started := time.Now()
+		err := p.stub.Run(ctx)
+		if ctx.Err() != nil {
+			return nil
+		}
+		if time.Since(started) >= nriStableConn || failingSince.IsZero() {
+			failingSince = time.Now()
+			backoff = nriBackoffMin
+		}
+		if time.Since(failingSince) > nriGiveUp {
+			return fmt.Errorf("no runtime connection for %s: %w", nriGiveUp, err)
+		}
+		p.log.Warn("connection to runtime lost, reconnecting", "error", err, "retry_in", backoff)
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-time.After(backoff):
+		}
+		backoff = min(backoff*2, nriBackoffMax)
+	}
 }
 
 func (p *Plugin) PostCreateContainer(_ context.Context, pod *api.PodSandbox, ctr *api.Container) error {
@@ -122,9 +176,4 @@ func (p *Plugin) RemoveContainer(_ context.Context, pod *api.PodSandbox, ctr *ap
 		p.log.Warn("failed to cleanup dynamic CA bundle", "error", err)
 	}
 	return nil
-}
-
-func (p *Plugin) onClose() {
-	p.log.Info("connection to runtime lost")
-	os.Exit(1)
 }
