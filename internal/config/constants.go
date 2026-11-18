@@ -27,6 +27,9 @@ const (
 	AnnoProcessorsExclude = AnnoPrefix + "processors.exclude"
 
 	EnvLogLevel = "CAINJEKT_LOG_LEVEL"
+	// EnvSpecTrustEnv=false disables putting trust env vars on the container
+	// spec (see ContainerCADir).
+	EnvSpecTrustEnv = "CAINJEKT_SPEC_TRUST_ENV"
 
 	FailPolicyOpen          = "fail-open"
 	FailPolicyClosed        = "fail-closed"

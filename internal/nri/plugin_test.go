@@ -242,3 +242,85 @@ func TestUnknownCainjektKeys(t *testing.T) {
 		t.Fatalf("unknownCainjektKeys() = %v", got)
 	}
 }
+
+func withPluginTrustStores(t *testing.T, paths []string) {
+	t.Helper()
+	prev := pluginTrustStores
+	pluginTrustStores = paths
+	t.Cleanup(func() { pluginTrustStores = prev })
+}
+
+func adjEnv(adj *api.ContainerAdjustment) map[string]string {
+	out := map[string]string{}
+	for _, kv := range adj.GetEnv() {
+		out[kv.GetKey()] = kv.GetValue()
+	}
+	return out
+}
+
+func TestCreateContainerSetsSpecTrustEnvForExec(t *testing.T) {
+	t.Setenv(config.EnvCAFile, writeRealCA(t, "org"))
+	root := t.TempDir()
+	t.Setenv(config.EnvDynamicCARoot, root)
+	withPluginTrustStores(t, []string{writeRealCA(t, "public-root")}) // stands in for the image's roots
+
+	p := newPlugin(slog.New(slog.NewTextHandler(io.Discard, nil)))
+	pod := &api.PodSandbox{Annotations: map[string]string{config.AnnoEnabled: "true"}}
+	ctr := &api.Container{Id: "c1", Args: []string{"sh"}, Env: []string{"GIT_SSL_CAINFO=/mine.pem"}}
+
+	adj, _, err := p.CreateContainer(context.Background(), pod, ctr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	env := adjEnv(adj)
+	if env["SSL_CERT_FILE"] != config.ContainerMergedCA || env["REQUESTS_CA_BUNDLE"] != config.ContainerMergedCA {
+		t.Fatalf("trust-replacing vars must point at merged bundle: %v", env)
+	}
+	if env["NODE_EXTRA_CA_CERTS"] != config.ContainerOrgCA {
+		t.Fatalf("NODE_EXTRA_CA_CERTS = %q", env["NODE_EXTRA_CA_CERTS"])
+	}
+	if _, ok := env["GIT_SSL_CAINFO"]; ok {
+		t.Fatal("user-defined env var must not be overridden")
+	}
+	mounted := false
+	for _, m := range adj.GetMounts() {
+		if m.GetDestination() == config.ContainerCADir && m.GetSource() == filepath.Join(root, "c1") {
+			mounted = true
+		}
+	}
+	if !mounted {
+		t.Fatalf("staged dir not mounted at %s: %v", config.ContainerCADir, adj.GetMounts())
+	}
+	fi, err := os.Stat(filepath.Join(root, "c1", config.MergedCAFileName))
+	if err != nil {
+		t.Fatalf("merged bundle not seeded: %v", err)
+	}
+	if fi.Mode().Perm() != 0o644 {
+		t.Fatalf("merged bundle mode = %v, want 0644 (readable by non-root containers)", fi.Mode().Perm())
+	}
+	if di, _ := os.Stat(filepath.Join(root, "c1")); di.Mode().Perm() != 0o755 {
+		t.Fatalf("staged dir mode = %v, want 0755", di.Mode().Perm())
+	}
+}
+
+// Without public roots to seed with, a "merged" bundle would contain only the
+// org CA and break public TLS, so trust-replacing vars must stay unset.
+func TestCreateContainerSkipsReplacingEnvWithoutPluginRoots(t *testing.T) {
+	t.Setenv(config.EnvCAFile, writeRealCA(t, "org"))
+	t.Setenv(config.EnvDynamicCARoot, t.TempDir())
+	withPluginTrustStores(t, []string{filepath.Join(t.TempDir(), "missing")})
+
+	p := newPlugin(slog.New(slog.NewTextHandler(io.Discard, nil)))
+	pod := &api.PodSandbox{Annotations: map[string]string{config.AnnoEnabled: "true"}}
+	adj, _, err := p.CreateContainer(context.Background(), pod, &api.Container{Id: "c2", Args: []string{"sh"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	env := adjEnv(adj)
+	if _, ok := env["SSL_CERT_FILE"]; ok {
+		t.Fatalf("SSL_CERT_FILE set without a complete merged bundle: %v", env)
+	}
+	if env["NODE_EXTRA_CA_CERTS"] != config.ContainerOrgCA {
+		t.Fatal("additive NODE_EXTRA_CA_CERTS should still be set")
+	}
+}

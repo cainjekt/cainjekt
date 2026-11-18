@@ -20,6 +20,7 @@ func newPlugin(log *slog.Logger) *Plugin {
 		tracked:        newTracker(),
 		failPolicy:     config.FailPolicyOpen,
 		hookTimeoutSec: config.DefaultHookTimeoutSec,
+		specTrustEnv:   true,
 	}
 }
 

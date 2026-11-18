@@ -142,6 +142,7 @@ The DaemonSet supports the following environment variables:
 - `CAINJEKT_DYNAMIC_CA_ROOT`: Root directory for per-container CA staging (default: `/run/cainjekt/containers`)
 - `CAINJEKT_FAIL_POLICY`: Failure policy, either `fail-open` or `fail-closed` (default: `fail-open`). Applies to the plugin (CA staging), the OCI hook and the in-container wrapper. Under `fail-open` an injection problem is logged and the container starts without (part of) the CA configuration; under `fail-closed` it fails the container start. Invalid values make the plugin refuse to start.
 - `CAINJEKT_LOG_LEVEL`: `debug`, `info` (default), `warn` or `error`. At `info` only injected containers are logged; skipped containers are logged at `debug`.
+- `CAINJEKT_SPEC_TRUST_ENV`: `true` (default) or `false`. When enabled, the per-container CA directory is bind-mounted read-only at `/etc/cainjekt-ca` and `SSL_CERT_FILE`, `REQUESTS_CA_BUNDLE`, `CURL_CA_BUNDLE`, `GIT_SSL_CAINFO` (merged bundle: public roots + org CA) and `NODE_EXTRA_CA_CERTS` (org CA) are set on the container spec, so processes started with `kubectl exec` also get them. Variables already defined by the container are not overridden.
 - `CAINJEKT_HOOK_TIMEOUT_SEC`: OCI hook timeout in seconds, 2-120 (default: `20`). The runtime kills a hook that exceeds it **and fails the container**, so the hook gives up by itself one second earlier under `fail-open`.
 
 ### Pod Annotations
