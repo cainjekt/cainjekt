@@ -229,3 +229,16 @@ func envValue(env []string, key string) string {
 	}
 	return ""
 }
+
+func TestUnknownCainjektKeys(t *testing.T) {
+	pod := &api.PodSandbox{Annotations: map[string]string{
+		config.AnnoEnabled:              "true",
+		config.AnnoPrefix + "enable":    "true",
+		config.AnnoPrefix + "processor": "x",
+		"other.io/enable":               "true",
+	}}
+	got := unknownCainjektKeys(pod)
+	if len(got) != 2 || got[0] != config.AnnoPrefix+"enable" || got[1] != config.AnnoPrefix+"processor" {
+		t.Fatalf("unknownCainjektKeys() = %v", got)
+	}
+}
