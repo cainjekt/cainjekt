@@ -1,15 +1,17 @@
 package config
 
+import "strings"
+
 const (
 	EnvHookMode   = "HOOK_MODE"
 	ModeCreateRT  = "createruntime"
 	ModeCreateCtr = "createcontainer"
 
-	EnvCAFile          = "CAINJEKT_CA_FILE"
-	EnvDynamicCARoot   = "CAINJEKT_DYNAMIC_CA_ROOT"
-	EnvFailPolicy      = "CAINJEKT_FAIL_POLICY"
-	EnvWrapperMode     = "CAINJEKT_WRAPPER_MODE"
-	EnvHookContextFile = "CAINJEKT_HOOK_CONTEXT_FILE"
+	EnvCAFile           = "CAINJEKT_CA_FILE"
+	EnvDynamicCARoot    = "CAINJEKT_DYNAMIC_CA_ROOT"
+	EnvFailPolicy       = "CAINJEKT_FAIL_POLICY"
+	EnvWrapperMode      = "CAINJEKT_WRAPPER_MODE"
+	EnvHookContextFile  = "CAINJEKT_HOOK_CONTEXT_FILE"
 	EnvPluginBinaryPath = "CAINJEKT_PLUGIN_BINARY_PATH"
 
 	AnnoEnabled = "cainjekt.tsuzu.dev/enabled"
@@ -17,13 +19,21 @@ const (
 	AnnoProcessorsInclude = "cainjekt.tsuzu.dev/processors.include"
 	AnnoProcessorsExclude = "cainjekt.tsuzu.dev/processors.exclude"
 
-	FailPolicyOpen         = "fail-open"
-	DefaultCAFile          = "/etc/cainjekt/ca-bundle.pem"
-	DefaultDynamicCARoot   = "/run/cainjekt/containers"
-	DefaultMode            = "fs"
-	WrapperPath            = "/cainjekt-entrypoint"
-	HookContextFile        = "/etc/cainjekt/hook-context.json"
+	FailPolicyOpen          = "fail-open"
+	FailPolicyClosed        = "fail-closed"
+	DefaultCAFile           = "/etc/cainjekt/ca-bundle.pem"
+	DefaultDynamicCARoot    = "/run/cainjekt/containers"
+	DefaultMode             = "fs"
+	WrapperPath             = "/cainjekt-entrypoint"
+	HookContextFile         = "/etc/cainjekt/hook-context.json"
 	DefaultPluginBinaryPath = "/opt/cainjekt/bin/cainjekt"
 
 	DefaultHookTimeoutSec = 2
 )
+
+// IsFailClosed reports whether policy explicitly requests fail-closed
+// behavior. Anything else, including an empty or unknown value, is fail-open:
+// a CA injection problem must not take workloads down unless asked to.
+func IsFailClosed(policy string) bool {
+	return strings.EqualFold(strings.TrimSpace(policy), FailPolicyClosed)
+}

@@ -15,16 +15,16 @@ import (
 func Run(log *slog.Logger, args []string) error {
 	if strings.TrimSpace(os.Getenv(config.EnvHookMode)) != "" {
 		if err := hook.Run(log); err != nil {
-			if strings.EqualFold(getenvOr(config.EnvFailPolicy, config.FailPolicyOpen), config.FailPolicyOpen) {
-				log.Error("hook failed (fail-open)", "error", err)
-				return nil
+			if config.IsFailClosed(os.Getenv(config.EnvFailPolicy)) {
+				return fmt.Errorf("hook failed: %w", err)
 			}
-			return fmt.Errorf("hook failed: %w", err)
+			log.Error("hook failed (fail-open)", "error", err)
+			return nil
 		}
 		return nil
 	}
 	if strings.TrimSpace(os.Getenv(config.EnvWrapperMode)) != "" {
-		if err := wrapper.Run(); err != nil {
+		if err := wrapper.Run(log); err != nil {
 			return fmt.Errorf("wrapper failed: %w", err)
 		}
 		return nil
@@ -34,11 +34,4 @@ func Run(log *slog.Logger, args []string) error {
 		return fmt.Errorf("plugin failed: %w", err)
 	}
 	return nil
-}
-
-func getenvOr(key, fallback string) string {
-	if v := strings.TrimSpace(os.Getenv(key)); v != "" {
-		return v
-	}
-	return fallback
 }
